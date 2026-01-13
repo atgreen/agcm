@@ -75,7 +75,7 @@ func runShowCase(cmd *cobra.Command, args []string) error {
 	// Print comments separately for better CLI output
 	if showComments && len(comments) > 0 {
 		commentsResult, _ := client.GetCaseComments(ctx, caseNumber)
-		fmt.Println("\n## Comments\n")
+		fmt.Print("\n## Comments\n\n")
 		for i, comment := range commentsResult {
 			fmt.Printf("### Comment %d\n", i+1)
 			fmt.Printf("**From:** %s\n", comment.Author)
