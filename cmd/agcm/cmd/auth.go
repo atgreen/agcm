@@ -110,6 +110,11 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 	fmt.Println()
 	fmt.Println("Authentication configured successfully!")
+	if storage.UsingKeyring() {
+		fmt.Println("Token stored securely in system keyring.")
+	} else {
+		fmt.Println("Token stored in config file (keyring unavailable).")
+	}
 	fmt.Println("You can now use agcm to access the Red Hat Customer Portal.")
 
 	return nil
@@ -182,6 +187,11 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println("Status: Authenticated")
 	fmt.Printf("Config: %s\n", cfgDir)
+	if storage.UsingKeyring() {
+		fmt.Println("Storage: System keyring (secure)")
+	} else {
+		fmt.Println("Storage: Config file (keyring unavailable)")
+	}
 
 	return nil
 }

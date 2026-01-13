@@ -7,22 +7,42 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/zalando/go-keyring"
 )
 
 const (
-	tokenFileName = "token"
-	dirPerms      = 0700
-	filePerms     = 0600
+	tokenFileName  = "token"
+	dirPerms       = 0700
+	filePerms      = 0600
+	keyringService = "agcm"
+	keyringUser    = "offline-token"
 )
 
 // Storage handles credential persistence
 type Storage struct {
-	configDir string
+	configDir      string
+	keyringEnabled bool
 }
 
 // NewStorage creates a new Storage instance
 func NewStorage(configDir string) *Storage {
-	return &Storage{configDir: configDir}
+	s := &Storage{configDir: configDir}
+	// Test if keyring is available
+	s.keyringEnabled = s.testKeyring()
+	return s
+}
+
+// testKeyring checks if the system keyring is available
+func (s *Storage) testKeyring() bool {
+	// Try to access keyring - if it fails, fall back to file storage
+	err := keyring.Set(keyringService, "test", "test")
+	if err != nil {
+		return false
+	}
+	// Clean up test entry
+	_ = keyring.Delete(keyringService, "test")
+	return true
 }
 
 // DefaultConfigDir returns the default configuration directory
@@ -46,9 +66,77 @@ func (s *Storage) EnsureDir() error {
 }
 
 // SaveToken stores the offline token
-// Note: This uses basic obfuscation, not encryption. For production,
-// consider using OS keychain (keyring, keyctl, etc.)
 func (s *Storage) SaveToken(token string) error {
+	if s.keyringEnabled {
+		err := keyring.Set(keyringService, keyringUser, token)
+		if err == nil {
+			// Remove any old file-based token
+			s.deleteFileToken()
+			return nil
+		}
+		// Fall through to file storage if keyring fails
+	}
+
+	return s.saveFileToken(token)
+}
+
+// LoadToken retrieves the stored offline token
+func (s *Storage) LoadToken() (string, error) {
+	if s.keyringEnabled {
+		token, err := keyring.Get(keyringService, keyringUser)
+		if err == nil && token != "" {
+			return token, nil
+		}
+		// Fall through to file storage if keyring fails or is empty
+	}
+
+	return s.loadFileToken()
+}
+
+// DeleteToken removes the stored token
+func (s *Storage) DeleteToken() error {
+	var keyringErr, fileErr error
+
+	if s.keyringEnabled {
+		keyringErr = keyring.Delete(keyringService, keyringUser)
+	}
+
+	fileErr = s.deleteFileToken()
+
+	// Return error only if both fail and at least one had a token
+	if keyringErr != nil && fileErr != nil {
+		return fmt.Errorf("failed to delete token")
+	}
+	return nil
+}
+
+// HasToken checks if a token is stored
+func (s *Storage) HasToken() bool {
+	if s.keyringEnabled {
+		token, err := keyring.Get(keyringService, keyringUser)
+		if err == nil && token != "" {
+			return true
+		}
+	}
+
+	path := filepath.Join(s.configDir, tokenFileName)
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// ConfigDir returns the configuration directory path
+func (s *Storage) ConfigDir() string {
+	return s.configDir
+}
+
+// UsingKeyring returns true if keyring storage is being used
+func (s *Storage) UsingKeyring() bool {
+	return s.keyringEnabled
+}
+
+// File-based storage fallback methods
+
+func (s *Storage) saveFileToken(token string) error {
 	if err := s.EnsureDir(); err != nil {
 		return err
 	}
@@ -60,8 +148,7 @@ func (s *Storage) SaveToken(token string) error {
 	return os.WriteFile(path, []byte(encoded), filePerms)
 }
 
-// LoadToken retrieves the stored offline token
-func (s *Storage) LoadToken() (string, error) {
+func (s *Storage) loadFileToken() (string, error) {
 	path := filepath.Join(s.configDir, tokenFileName)
 
 	data, err := os.ReadFile(path)
@@ -80,24 +167,11 @@ func (s *Storage) LoadToken() (string, error) {
 	return string(decoded), nil
 }
 
-// DeleteToken removes the stored token
-func (s *Storage) DeleteToken() error {
+func (s *Storage) deleteFileToken() error {
 	path := filepath.Join(s.configDir, tokenFileName)
 	err := os.Remove(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete token: %w", err)
 	}
 	return nil
-}
-
-// HasToken checks if a token is stored
-func (s *Storage) HasToken() bool {
-	path := filepath.Join(s.configDir, tokenFileName)
-	_, err := os.Stat(path)
-	return err == nil
-}
-
-// ConfigDir returns the configuration directory path
-func (s *Storage) ConfigDir() string {
-	return s.configDir
 }
