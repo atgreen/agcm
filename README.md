@@ -81,6 +81,8 @@ agcm --help             # Show help
 agcm auth login         # Authenticate with offline token
 agcm auth logout        # Remove stored credentials
 agcm auth status        # Check authentication status
+agcm update             # Update to latest version
+agcm update --check     # Check for updates without installing
 ```
 
 ## Keyboard Shortcuts
