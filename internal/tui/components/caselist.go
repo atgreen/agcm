@@ -58,6 +58,26 @@ func maskText(s string) string {
 	return result.String()
 }
 
+// stripNonPrintable removes control characters and non-printable chars from a string
+func stripNonPrintable(s string) string {
+	var result strings.Builder
+	for _, r := range s {
+		// Allow printable ASCII and common Unicode (letters, numbers, punctuation, symbols)
+		// Skip control chars (0-31, 127), and other problematic chars
+		if r >= 32 && r < 127 {
+			result.WriteRune(r)
+		} else if r >= 128 && r < 0xFFF0 {
+			// Allow most Unicode but skip special formatting chars
+			if (r < 0x200B || r > 0x200F) && // zero-width chars
+				(r < 0x2028 || r > 0x202F) && // line/paragraph separators
+				(r < 0xFFF0) { // specials
+				result.WriteRune(r)
+			}
+		}
+	}
+	return result.String()
+}
+
 // NewCaseList creates a new case list component
 func NewCaseList(s *styles.Styles, keys *styles.KeyMap) *CaseList {
 	return &CaseList{
@@ -549,6 +569,8 @@ func (c *CaseList) renderRow(cs *api.Case, width int, selected bool) string {
 	}
 
 	summary := cs.Summary
+	// Strip control characters and non-printable chars to prevent rendering issues
+	summary = stripNonPrintable(summary)
 	if c.maskMode {
 		summary = maskText(summary)
 	}
