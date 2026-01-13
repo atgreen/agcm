@@ -19,6 +19,11 @@ type TextSearchQueryMsg struct {
 	Query string
 }
 
+// TextSearchNavigateMsg is sent when navigating between matches
+type TextSearchNavigateMsg struct {
+	Match *TextMatch
+}
+
 // TextMatch represents a match in the text
 type TextMatch struct {
 	TabIndex   int    // 0=details, 1=comments, 2=attachments
@@ -130,16 +135,12 @@ func (t *TextSearch) Update(msg tea.Msg) (*TextSearch, tea.Cmd) {
 		case "esc":
 			t.Hide()
 			return t, func() tea.Msg { return TextSearchCloseMsg{} }
-		case "enter":
-			// Move to next match on enter
-			t.NextMatch()
-			return t, nil
-		case "ctrl+n":
-			t.NextMatch()
-			return t, nil
+		case "enter", "ctrl+n":
+			match := t.NextMatch()
+			return t, func() tea.Msg { return TextSearchNavigateMsg{Match: match} }
 		case "ctrl+p":
-			t.PrevMatch()
-			return t, nil
+			match := t.PrevMatch()
+			return t, func() tea.Msg { return TextSearchNavigateMsg{Match: match} }
 		}
 	}
 

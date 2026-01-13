@@ -28,6 +28,7 @@ type KeyMap struct {
 	Open        key.Binding
 	Export      key.Binding
 	BulkExport  key.Binding
+	TextSearch  key.Binding
 }
 
 // DefaultKeyMap returns the default key bindings
@@ -120,6 +121,10 @@ func DefaultKeyMap() *KeyMap {
 		BulkExport: key.NewBinding(
 			key.WithKeys("E"),
 			key.WithHelp("E", "bulk export"),
+		),
+		TextSearch: key.NewBinding(
+			key.WithKeys("ctrl+f"),
+			key.WithHelp("ctrl+f", "find in case"),
 		),
 	}
 }

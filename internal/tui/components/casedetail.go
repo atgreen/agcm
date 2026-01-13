@@ -135,6 +135,16 @@ func (c *CaseDetail) ScrollDown(n int) {
 	c.viewport.SetYOffset(c.viewport.YOffset + n)
 }
 
+// ScrollToLine scrolls the viewport to show the given line number
+func (c *CaseDetail) ScrollToLine(line int) {
+	// Center the line in the viewport if possible
+	targetOffset := line - c.viewport.Height/2
+	if targetOffset < 0 {
+		targetOffset = 0
+	}
+	c.viewport.SetYOffset(targetOffset)
+}
+
 // LinkAt returns the URL at the given viewport-relative coordinates, if any.
 func (c *CaseDetail) LinkAt(x, y int) (string, bool) {
 	if y < 0 || y >= c.viewport.Height {

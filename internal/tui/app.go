@@ -420,8 +420,8 @@ func (m *Model) searchInCase(query string) []components.TextMatch {
 	var matches []components.TextMatch
 	query = strings.ToLower(query)
 
-	// Get current case
-	c := m.caseList.SelectedCase()
+	// Get current case from detail view (has full data including description)
+	c := m.caseDetail.GetCase()
 	if c == nil {
 		return matches
 	}
@@ -628,13 +628,41 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle text search input
 	if m.textSearchMode && m.textSearch.IsVisible() {
-		textSearch, cmd := m.textSearch.Update(msg)
-		m.textSearch = textSearch
-		if !m.textSearch.IsVisible() {
-			m.textSearchMode = false
-			m.caseDetail.ClearSearchHighlight()
+		// Handle search query messages here (they come back from textSearch.Update)
+		if queryMsg, ok := msg.(components.TextSearchQueryMsg); ok {
+			if queryMsg.Query != "" {
+				matches := m.searchInCase(queryMsg.Query)
+				m.textSearch.SetMatches(matches)
+				m.caseDetail.SetSearchHighlight(queryMsg.Query)
+			} else {
+				m.textSearch.SetMatches(nil)
+				m.caseDetail.ClearSearchHighlight()
+			}
+			return m, nil
 		}
-		return m, cmd
+
+		// Handle navigation between matches
+		if navMsg, ok := msg.(components.TextSearchNavigateMsg); ok {
+			if navMsg.Match != nil {
+				// Switch to the tab containing the match and scroll to it
+				m.caseDetail.SetActiveTab(navMsg.Match.TabIndex)
+				m.caseDetail.ScrollToLine(navMsg.Match.LineNumber)
+			}
+			return m, nil
+		}
+
+		// Allow mouse events to pass through for scrolling
+		if _, ok := msg.(tea.MouseMsg); ok {
+			// Don't intercept mouse events - let them fall through to normal handling
+		} else {
+			textSearch, cmd := m.textSearch.Update(msg)
+			m.textSearch = textSearch
+			if !m.textSearch.IsVisible() {
+				m.textSearchMode = false
+				m.caseDetail.ClearSearchHighlight()
+			}
+			return m, cmd
+		}
 	}
 
 	switch msg := msg.(type) {
@@ -893,7 +921,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Ctrl+F for text search within case
-			if msg.String() == "ctrl+f" {
+			if key.Matches(msg, m.keys.TextSearch) {
 				m.textSearchMode = true
 				m.textSearch.SetWidth(m.width)
 				return m, m.textSearch.Show()
@@ -1441,6 +1469,11 @@ func (m *Model) View() string {
 		view = overlayCenter(view, m.modal.View(), m.width, m.height)
 	}
 
+	// Text search bar overlay (bottom of screen)
+	if m.textSearchMode && m.textSearch.IsVisible() {
+		view = overlayBottom(view, m.textSearch.View(), m.width, m.height)
+	}
+
 	// Enforce exact height to prevent terminal scrolling
 	lines := strings.Split(view, "\n")
 	if os.Getenv("AGCM_DEBUG_LAYOUT") != "" && len(lines) != m.height {
@@ -1505,6 +1538,36 @@ func overlayCenter(background, dialog string, width, height int) string {
 		}
 
 		bgLines[bgY] = before + dialogLine + after
+	}
+
+	return strings.Join(bgLines[:height], "\n")
+}
+
+// overlayBottom places an overlay at the bottom of the screen
+func overlayBottom(background, overlay string, width, height int) string {
+	bgLines := strings.Split(background, "\n")
+	overlayLines := strings.Split(overlay, "\n")
+
+	// Ensure background has enough lines
+	for len(bgLines) < height {
+		bgLines = append(bgLines, "")
+	}
+
+	overlayHeight := len(overlayLines)
+
+	// Calculate bottom position (above status bar, so height - overlayHeight - 1)
+	startY := height - overlayHeight - 1
+	if startY < 0 {
+		startY = 0
+	}
+
+	// Replace lines at the bottom with overlay
+	for i, overlayLine := range overlayLines {
+		bgY := startY + i
+		if bgY >= len(bgLines) {
+			break
+		}
+		bgLines[bgY] = overlayLine
 	}
 
 	return strings.Join(bgLines[:height], "\n")
