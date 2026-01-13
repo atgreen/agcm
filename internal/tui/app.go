@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -33,23 +32,8 @@ func init() {
 func debugLog(format string, args ...interface{}) {
 	if debugFile != nil {
 		fmt.Fprintf(debugFile, time.Now().Format("15:04:05.000")+" "+format+"\n", args...)
-		debugFile.Sync()
+		_ = debugFile.Sync()
 	}
-}
-
-var urlRegex = regexp.MustCompile(`https?://[^\s<>"{}|\\^` + "`" + `\[\]]+`)
-
-// maskText replaces letters and digits with asterisks for privacy
-func maskText(s string) string {
-	var result strings.Builder
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			result.WriteRune('*')
-		} else {
-			result.WriteRune(r)
-		}
-	}
-	return result.String()
 }
 
 // Pane represents which pane is focused

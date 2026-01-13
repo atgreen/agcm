@@ -229,30 +229,6 @@ func (c *Client) getRaw(ctx context.Context, path string, query url.Values) ([]b
 	return body, nil
 }
 
-// post performs a POST request
-func (c *Client) post(ctx context.Context, path string, query url.Values, body io.Reader, result interface{}) error {
-	resp, err := c.do(ctx, http.MethodPost, path, query, body)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(resp.Body)
-		if c.debug && c.debugFile != nil {
-			fmt.Fprintf(c.debugFile, "  Response: %d %s\n", resp.StatusCode, string(respBody))
-		}
-		return fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	if result != nil {
-		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
-			return fmt.Errorf("failed to decode response: %w", err)
-		}
-	}
-	return nil
-}
-
 // postHydra performs a POST request to the Hydra API (different base URL)
 func (c *Client) postHydra(ctx context.Context, path string, body io.Reader, result interface{}) error {
 	// Hydra API uses access.redhat.com instead of api.access.redhat.com

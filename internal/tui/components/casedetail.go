@@ -127,12 +127,16 @@ func (c *CaseDetail) ClearSearchHighlight() {
 
 // ScrollUp scrolls the viewport up by n lines
 func (c *CaseDetail) ScrollUp(n int) {
-	c.viewport.LineUp(n)
+	for i := 0; i < n; i++ {
+		c.viewport.ViewUp()
+	}
 }
 
 // ScrollDown scrolls the viewport down by n lines
 func (c *CaseDetail) ScrollDown(n int) {
-	c.viewport.LineDown(n)
+	for i := 0; i < n; i++ {
+		c.viewport.ViewDown()
+	}
 }
 
 // LinkAt returns the URL at the given viewport-relative coordinates, if any.

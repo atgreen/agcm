@@ -25,7 +25,7 @@ func init() {
 func fpDebugLog(format string, args ...interface{}) {
 	if fpDebugFile != nil {
 		fmt.Fprintf(fpDebugFile, time.Now().Format("15:04:05.000")+" "+format+"\n", args...)
-		fpDebugFile.Sync()
+		_ = fpDebugFile.Sync()
 	}
 }
 
@@ -61,7 +61,7 @@ func NewFilePickerDialog(s *styles.Styles) *FilePickerDialog {
 	fp.ShowHidden = false
 	fp.ShowPermissions = false
 	fp.ShowSize = true
-	fp.Height = 15
+	fp.SetHeight(15)
 
 	ti := textinput.New()
 	ti.Placeholder = "Enter path..."
@@ -133,7 +133,7 @@ func (f *FilePickerDialog) IsVisible() bool {
 func (f *FilePickerDialog) SetSize(width, height int) {
 	f.width = width
 	f.height = height
-	f.filepicker.Height = min(15, height-12)
+	f.filepicker.SetHeight(min(15, height-12))
 	f.textInput.Width = min(50, width-20)
 }
 
@@ -248,7 +248,7 @@ func (f *FilePickerDialog) View() string {
 	}
 
 	// Current directory
-	dirStyle := f.styles.Label.Copy().Bold(true)
+	dirStyle := f.styles.Label.Bold(true)
 	content.WriteString(dirStyle.Render("📁 " + f.filepicker.CurrentDirectory))
 	content.WriteString("\n")
 	content.WriteString(strings.Repeat("─", 50))

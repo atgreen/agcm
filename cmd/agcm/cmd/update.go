@@ -73,13 +73,12 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("Downloading and installing...")
 
-	exe, err := selfupdate.UpdateSelf(v, repoSlug)
+	release, err := selfupdate.UpdateSelf(v, repoSlug)
 	if err != nil {
 		return fmt.Errorf("failed to update: %w", err)
 	}
 
-	fmt.Printf("Successfully updated to v%s\n", latest.Version)
-	fmt.Printf("Executable: %s\n", exe)
+	fmt.Printf("Successfully updated to v%s\n", release.Version)
 
 	if latest.ReleaseNotes != "" {
 		fmt.Println("\nRelease notes:")
