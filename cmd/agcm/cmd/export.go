@@ -88,7 +88,7 @@ func init() {
 	exportCasesCmd.Flags().IntVar(&exportConcurrency, "concurrency", 4, "parallel downloads")
 
 	// Filter flags for cases command
-	exportCasesCmd.Flags().StringVar(&exportStatus, "status", "", "filter by status (comma-separated)")
+	exportCasesCmd.Flags().StringVar(&exportStatus, "status", "", "filter by status: open, closed, or exact values (comma-separated)")
 	exportCasesCmd.Flags().StringVar(&exportSeverity, "severity", "", "filter by severity (comma-separated)")
 	exportCasesCmd.Flags().StringVar(&exportProduct, "product", "", "filter by product")
 	exportCasesCmd.Flags().StringVar(&exportSince, "since", "", "filter by start date (YYYY-MM-DD)")
@@ -115,6 +115,7 @@ func runExportCase(cmd *cobra.Command, args []string) error {
 		Concurrency:        exportConcurrency,
 		TemplatePath:       exportTemplate,
 		CaseNumbers:        args,
+		Debug:              IsDebugMode(),
 	}
 
 	exporter, err := export.NewExporter(client, opts)
@@ -165,7 +166,16 @@ func runExportCases(cmd *cobra.Command, args []string) error {
 	filter := &api.CaseFilter{}
 
 	if exportStatus != "" {
-		filter.Status = strings.Split(exportStatus, ",")
+		// Handle status aliases
+		statusInput := strings.ToLower(strings.TrimSpace(exportStatus))
+		if statusInput == "open" {
+			// "open" is an alias for all active (non-closed) statuses
+			filter.Status = []string{"Waiting on Red Hat", "Waiting on Customer"}
+		} else if statusInput == "closed" {
+			filter.Status = []string{"Closed"}
+		} else {
+			filter.Status = strings.Split(exportStatus, ",")
+		}
 	}
 	if exportSeverity != "" {
 		filter.Severity = strings.Split(exportSeverity, ",")
@@ -202,6 +212,7 @@ func runExportCases(cmd *cobra.Command, args []string) error {
 		Combined:           exportCombined,
 		Concurrency:        exportConcurrency,
 		TemplatePath:       exportTemplate,
+		Debug:              IsDebugMode(),
 	}
 
 	exporter, err := export.NewExporter(client, opts)

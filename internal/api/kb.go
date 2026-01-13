@@ -3,7 +3,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -57,19 +59,115 @@ func (c *Client) GetArticle(ctx context.Context, articleID string) (*Article, er
 	return &result, nil
 }
 
-// Search performs a global search across solutions and articles
+// KCSSearchRequest is the request body for the KCS search API
+type KCSSearchRequest struct {
+	Query string `json:"q"`
+	Rows  int    `json:"rows,omitempty"`
+	Start int    `json:"start,omitempty"`
+}
+
+// KCSSearchResponse is the response from the KCS search API
+type KCSSearchResponse struct {
+	Response struct {
+		NumFound int `json:"numFound"`
+		Start    int `json:"start"`
+		Docs     []struct {
+			ID              string   `json:"id"`
+			AllTitle        string   `json:"allTitle"`
+			Abstract        string   `json:"abstract,omitempty"`
+			DocumentKind    string   `json:"documentKind"`
+			URI             string   `json:"uri,omitempty"`
+			View_URI        string   `json:"view_uri,omitempty"`
+			PublishedTitle  string   `json:"publishedTitle,omitempty"`
+			PortalTags      []string `json:"portal_tags,omitempty"`
+			LastModifiedDate string  `json:"lastModifiedDate,omitempty"`
+		} `json:"docs"`
+	} `json:"response"`
+}
+
+// Search performs a global search across KCS (solutions and articles)
 func (c *Client) Search(ctx context.Context, keyword string, limit int) ([]SearchResult, error) {
-	query := url.Values{}
-	query.Set("keyword", keyword)
-	if limit > 0 {
-		query.Set("limit", strconv.Itoa(limit))
+	if limit <= 0 {
+		limit = 10
 	}
 
-	var result struct {
-		SearchResults []SearchResult `json:"searchResult"`
+	reqBody := KCSSearchRequest{
+		Query: keyword,
+		Rows:  limit,
 	}
-	if err := c.get(ctx, "/rs/search", query, &result); err != nil {
+
+	var result KCSSearchResponse
+	if err := c.post(ctx, "/support/search/v2/kcs", reqBody, &result); err != nil {
 		return nil, err
 	}
-	return result.SearchResults, nil
+
+	// Convert KCS response to SearchResult format
+	searchResults := make([]SearchResult, 0, len(result.Response.Docs))
+	for _, doc := range result.Response.Docs {
+		sr := SearchResult{
+			ID:       doc.ID,
+			Title:    doc.AllTitle,
+			Abstract: doc.Abstract,
+			URI:      doc.View_URI,
+		}
+		if sr.URI == "" {
+			sr.URI = doc.URI
+		}
+		if sr.Title == "" {
+			sr.Title = doc.PublishedTitle
+		}
+		// Determine type from documentKind
+		switch doc.DocumentKind {
+		case "Solution":
+			sr.Type = "solution"
+		case "Article":
+			sr.Type = "article"
+		default:
+			sr.Type = "article"
+		}
+		searchResults = append(searchResults, sr)
+	}
+
+	return searchResults, nil
+}
+
+// SearchCases searches for cases by keyword
+func (c *Client) SearchCases(ctx context.Context, keyword string, limit int) ([]SearchResult, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	// Build the expression for case search
+	fieldList := "case_number,case_summary,case_status,case_severity"
+	expression := "sort=case_lastModifiedDate desc&fl=" + url.QueryEscape(fieldList)
+
+	req := HydraSearchRequest{
+		Query:         keyword,
+		Start:         0,
+		Rows:          limit,
+		PartnerSearch: false,
+		Expression:    expression,
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal search request: %w", err)
+	}
+
+	var resp HydraSearchResponse
+	if err := c.postHydra(ctx, "/hydra/rest/search/v2/cases", bytes.NewReader(body), &resp); err != nil {
+		return nil, err
+	}
+
+	// Convert to SearchResult format
+	results := make([]SearchResult, 0, len(resp.Response.Docs))
+	for _, doc := range resp.Response.Docs {
+		results = append(results, SearchResult{
+			Type:  "case",
+			ID:    doc.CaseNumber,
+			Title: doc.CaseSummary,
+		})
+	}
+
+	return results, nil
 }

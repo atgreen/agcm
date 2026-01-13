@@ -37,9 +37,41 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	results, err := client.Search(ctx, query, searchLimit)
+	// Search both cases and KCS (solutions/articles)
+	var results []struct {
+		Type  string
+		ID    string
+		Title string
+	}
+
+	// Search cases
+	caseResults, err := client.SearchCases(ctx, query, searchLimit)
 	if err != nil {
-		return fmt.Errorf("search failed: %w", err)
+		// Log error but continue with KCS search
+		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: case search failed: %v\n", err)
+	} else {
+		for _, r := range caseResults {
+			results = append(results, struct {
+				Type  string
+				ID    string
+				Title string
+			}{r.Type, r.ID, r.Title})
+		}
+	}
+
+	// Search KCS (solutions and articles)
+	kcsResults, err := client.Search(ctx, query, searchLimit)
+	if err != nil {
+		// Log error but continue if we have case results
+		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: KCS search failed: %v\n", err)
+	} else {
+		for _, r := range kcsResults {
+			results = append(results, struct {
+				Type  string
+				ID    string
+				Title string
+			}{r.Type, r.ID, r.Title})
+		}
 	}
 
 	if len(results) == 0 {
@@ -64,9 +96,9 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		switch r.Type {
 		case "case":
 			cases = append(cases, item)
-		case "solution":
+		case "solution", "Solution":
 			solutions = append(solutions, item)
-		case "article":
+		case "article", "Article":
 			articles = append(articles, item)
 		}
 	}

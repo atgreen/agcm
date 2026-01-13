@@ -146,6 +146,11 @@ func GetConfigDir() string {
 	return cfgDir
 }
 
+// IsDebugMode returns whether debug mode is enabled
+func IsDebugMode() bool {
+	return debugMode
+}
+
 // GetStorage returns the auth storage
 func GetStorage() *auth.Storage {
 	return storage

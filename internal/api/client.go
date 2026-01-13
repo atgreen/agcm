@@ -229,6 +229,51 @@ func (c *Client) getRaw(ctx context.Context, path string, query url.Values) ([]b
 	return body, nil
 }
 
+// post performs a POST request and decodes the response
+func (c *Client) post(ctx context.Context, path string, requestBody interface{}, result interface{}) error {
+	var body io.Reader
+	if requestBody != nil {
+		jsonBytes, err := json.Marshal(requestBody)
+		if err != nil {
+			return fmt.Errorf("failed to encode request body: %w", err)
+		}
+		body = bytes.NewReader(jsonBytes)
+	}
+
+	resp, err := c.do(ctx, http.MethodPost, path, nil, body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if c.debug && c.debugFile != nil {
+			fmt.Fprintf(c.debugFile, "  Response: %d %s\n", resp.StatusCode, string(respBody))
+		}
+		return fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	if c.debug && c.debugFile != nil {
+		preview := string(respBody)
+		if len(preview) > 500 {
+			preview = preview[:500] + "..."
+		}
+		fmt.Fprintf(c.debugFile, "  Response: %d (%d bytes): %s\n", resp.StatusCode, len(respBody), preview)
+	}
+
+	if result != nil {
+		if err := json.Unmarshal(respBody, result); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+	}
+	return nil
+}
+
 // postHydra performs a POST request to the Hydra API (different base URL)
 func (c *Client) postHydra(ctx context.Context, path string, body io.Reader, result interface{}) error {
 	// Hydra API uses access.redhat.com instead of api.access.redhat.com

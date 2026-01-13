@@ -25,6 +25,7 @@ type Options struct {
 	Concurrency        int
 	TemplatePath       string   // Custom template file
 	CaseNumbers        []string // Specific cases to export
+	Debug              bool     // Enable debug logging
 }
 
 // DefaultOptions returns sensible defaults
@@ -51,6 +52,13 @@ type Exporter struct {
 	client    *api.Client
 	formatter *Formatter
 	opts      *Options
+}
+
+// debugf prints debug messages if debug mode is enabled
+func (e *Exporter) debugf(format string, args ...interface{}) {
+	if e.opts.Debug {
+		fmt.Fprintf(os.Stderr, "[DEBUG] "+format+"\n", args...)
+	}
 }
 
 // NewExporter creates a new exporter
@@ -87,24 +95,36 @@ func NewExporter(client *api.Client, opts *Options) (*Exporter, error) {
 
 // ExportCase exports a single case to markdown
 func (e *Exporter) ExportCase(ctx context.Context, caseNumber string) (*CaseExport, error) {
+	e.debugf("ExportCase: starting export for case %s", caseNumber)
+
 	// Get case details
+	e.debugf("ExportCase: fetching case details for %s", caseNumber)
 	c, err := e.client.GetCase(ctx, caseNumber)
 	if err != nil {
+		e.debugf("ExportCase: failed to get case %s: %v", caseNumber, err)
 		return nil, fmt.Errorf("failed to get case %s: %w", caseNumber, err)
 	}
+	e.debugf("ExportCase: got case %s: %s (status: %s)", caseNumber, c.Summary, c.Status)
 
 	// Get comments
+	e.debugf("ExportCase: fetching comments for case %s", caseNumber)
 	comments, err := e.client.GetCaseComments(ctx, caseNumber)
 	if err != nil {
+		e.debugf("ExportCase: failed to get comments for case %s: %v", caseNumber, err)
 		return nil, fmt.Errorf("failed to get comments for case %s: %w", caseNumber, err)
 	}
+	e.debugf("ExportCase: got %d comments for case %s", len(comments), caseNumber)
 
 	// Get attachments
+	e.debugf("ExportCase: fetching attachments for case %s", caseNumber)
 	attachments, err := e.client.GetCaseAttachments(ctx, caseNumber)
 	if err != nil {
+		e.debugf("ExportCase: failed to get attachments for case %s: %v", caseNumber, err)
 		return nil, fmt.Errorf("failed to get attachments for case %s: %w", caseNumber, err)
 	}
+	e.debugf("ExportCase: got %d attachments for case %s", len(attachments), caseNumber)
 
+	e.debugf("ExportCase: completed export for case %s", caseNumber)
 	return &CaseExport{
 		Case:        c,
 		Comments:    comments,
@@ -140,9 +160,15 @@ func (e *Exporter) ExportCaseToFile(ctx context.Context, caseNumber, outputPath 
 
 // ExportCases exports multiple cases with progress reporting
 func (e *Exporter) ExportCases(ctx context.Context, caseNumbers []string, progressCh chan<- Progress) (*Manifest, error) {
+	e.debugf("ExportCases: starting export of %d cases to %s", len(caseNumbers), e.opts.OutputDir)
+	e.debugf("ExportCases: options: format=%s combined=%v attachments=%v concurrency=%d",
+		e.opts.Format, e.opts.Combined, e.opts.IncludeAttachments, e.opts.Concurrency)
+
 	if err := os.MkdirAll(e.opts.OutputDir, 0755); err != nil {
+		e.debugf("ExportCases: failed to create output directory: %v", err)
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
+	e.debugf("ExportCases: created output directory %s", e.opts.OutputDir)
 
 	manifest := NewManifest()
 	manifest.ExportedAt = time.Now()
@@ -316,16 +342,23 @@ func (e *Exporter) downloadAttachment(ctx context.Context, caseNumber string, at
 
 // ExportWithFilter exports cases matching the given filter
 func (e *Exporter) ExportWithFilter(ctx context.Context, filter *api.CaseFilter, progressCh chan<- Progress) (*Manifest, error) {
+	e.debugf("ExportWithFilter: starting filtered export")
+	e.debugf("ExportWithFilter: filter status=%v severity=%v product=%q account=%q group=%q",
+		filter.Status, filter.Severity, filter.Product, filter.AccountNumber, filter.GroupNumber)
+
 	// Fetch all matching cases
 	var allCases []api.Case
 	filter.Count = 100 // Fetch in batches
 	filter.StartIndex = 0
 
 	for {
+		e.debugf("ExportWithFilter: fetching cases batch at offset %d (limit %d)", filter.StartIndex, filter.Count)
 		result, err := e.client.ListCases(ctx, filter)
 		if err != nil {
+			e.debugf("ExportWithFilter: failed to list cases: %v", err)
 			return nil, fmt.Errorf("failed to list cases: %w", err)
 		}
+		e.debugf("ExportWithFilter: got %d cases in batch (total available: %d)", len(result.Items), result.TotalCount)
 
 		allCases = append(allCases, result.Items...)
 
@@ -335,10 +368,18 @@ func (e *Exporter) ExportWithFilter(ctx context.Context, filter *api.CaseFilter,
 		filter.StartIndex += filter.Count
 	}
 
+	e.debugf("ExportWithFilter: found %d total cases to export", len(allCases))
+
+	if len(allCases) == 0 {
+		e.debugf("ExportWithFilter: no cases found matching filter")
+		return NewManifest(), nil
+	}
+
 	// Extract case numbers
 	caseNumbers := make([]string, len(allCases))
 	for i, c := range allCases {
 		caseNumbers[i] = c.CaseNumber
+		e.debugf("ExportWithFilter: case %d: %s - %s", i+1, c.CaseNumber, c.Summary)
 	}
 
 	return e.ExportCases(ctx, caseNumbers, progressCh)
