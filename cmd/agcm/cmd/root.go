@@ -36,8 +36,8 @@ var rootCmd = &cobra.Command{
 	Use:     "agcm",
 	Short:   "TUI for the Red Hat Support Portal",
 	Version: "dev", // Will be overridden by SetVersion
-	Long: `A terminal user interface for interacting with Red Hat's Customer Portal API.
-Browse cases, search solutions and articles, and export data to markdown.`,
+	Long: `A terminal user interface for browsing Red Hat support cases.
+Filter, sort, search, and export cases to markdown.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Skip initialization for auth commands
 		if cmd.Name() == "login" || cmd.Name() == "logout" || cmd.Name() == "status" {
