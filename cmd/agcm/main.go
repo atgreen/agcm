@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package main
 
 import "github.com/green/agcm/cmd/agcm/cmd"
