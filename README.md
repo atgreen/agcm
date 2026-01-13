@@ -75,7 +75,44 @@ agcm --version          # Show version
 agcm --help             # Show help
 ```
 
-### Subcommands
+### CLI Commands
+
+In addition to the TUI, agcm provides command-line tools for scripting and automation:
+
+#### List Cases
+
+```bash
+agcm list cases                     # List all cases
+agcm list cases --status open       # Filter by status
+agcm list cases --severity 1        # Filter by severity
+agcm list cases --limit 50          # Limit results
+agcm list accounts                  # List accessible accounts
+```
+
+#### Show Case Details
+
+```bash
+agcm show case 01234567             # Show case details in markdown
+agcm show case 01234567 --comments  # Include comments (default)
+```
+
+#### Export to Markdown
+
+```bash
+agcm export case 01234567           # Export single case
+agcm export case 01234567 01234568  # Export multiple cases
+agcm export cases --output ./cases  # Export all cases to directory
+agcm export cases --status open     # Export filtered cases
+```
+
+#### Search
+
+```bash
+agcm search "kernel panic"          # Search cases and solutions
+agcm search "NVMe driver" --limit 20
+```
+
+#### Authentication & Updates
 
 ```bash
 agcm auth login         # Authenticate with offline token
@@ -85,7 +122,7 @@ agcm update             # Update to latest version
 agcm update --check     # Check for updates without installing
 ```
 
-## Keyboard Shortcuts
+## Keyboard Shortcuts (TUI)
 
 | Key | Action |
 |-----|--------|
