@@ -49,7 +49,9 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Current version: %s\n", version)
 	fmt.Println("Checking for updates...")
 
-	latest, found, err := selfupdate.DetectLatest(repoSlug)
+	// Use updater without authentication for public repo
+	updater, _ := selfupdate.NewUpdater(selfupdate.Config{})
+	latest, found, err := updater.DetectLatest(repoSlug)
 	if err != nil {
 		return fmt.Errorf("failed to check for updates: %w", err)
 	}
@@ -73,7 +75,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("Downloading and installing...")
 
-	release, err := selfupdate.UpdateSelf(v, repoSlug)
+	release, err := updater.UpdateSelf(v, repoSlug)
 	if err != nil {
 		return fmt.Errorf("failed to update: %w", err)
 	}
