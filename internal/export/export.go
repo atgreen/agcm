@@ -67,6 +67,11 @@ func NewExporter(client *api.Client, opts *Options) (*Exporter, error) {
 		opts = DefaultOptions()
 	}
 
+	// Ensure concurrency is at least 1 to prevent deadlock
+	if opts.Concurrency < 1 {
+		opts.Concurrency = 1
+	}
+
 	var formatter *Formatter
 	var err error
 

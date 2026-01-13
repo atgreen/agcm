@@ -40,8 +40,8 @@ var rootCmd = &cobra.Command{
 	Long: `A terminal user interface for browsing Red Hat support cases.
 Filter, sort, search, and export cases to markdown.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Skip initialization for auth commands
-		if cmd.Name() == "login" || cmd.Name() == "logout" || cmd.Name() == "status" {
+		// Skip initialization for auth commands and update (doesn't need auth)
+		if cmd.Name() == "login" || cmd.Name() == "logout" || cmd.Name() == "status" || cmd.Name() == "update" {
 			return nil
 		}
 

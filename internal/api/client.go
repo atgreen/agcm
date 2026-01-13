@@ -128,9 +128,9 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		u += "?" + query.Encode()
 	}
 
-	// Read body for debug if needed
+	// Read body into bytes so we can retry if needed (body reader is consumed on first request)
 	var bodyBytes []byte
-	if body != nil && c.debug {
+	if body != nil {
 		bodyBytes, _ = io.ReadAll(body)
 		body = bytes.NewReader(bodyBytes)
 	}
@@ -167,8 +167,12 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		}
 		c.SetToken(newToken)
 
-		// Retry with new token
-		req, err = http.NewRequestWithContext(ctx, method, u, body)
+		// Retry with new token - recreate body reader since it was consumed
+		var retryBody io.Reader
+		if len(bodyBytes) > 0 {
+			retryBody = bytes.NewReader(bodyBytes)
+		}
+		req, err = http.NewRequestWithContext(ctx, method, u, retryBody)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create retry request: %w", err)
 		}

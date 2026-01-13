@@ -134,6 +134,30 @@ func (c *Client) ListCases(ctx context.Context, filter *CaseFilter) (*ListRespon
 		if filter.AccountNumber != "" {
 			fqParts = append(fqParts, fmt.Sprintf("case_accountNumber:%q", filter.AccountNumber))
 		}
+
+		// Group filter
+		if filter.GroupNumber != "" {
+			fqParts = append(fqParts, fmt.Sprintf("case_groupNumber:%q", filter.GroupNumber))
+		}
+
+		// Owner filter
+		if filter.OwnerSSOName != "" {
+			fqParts = append(fqParts, fmt.Sprintf("case_owner:%q", filter.OwnerSSOName))
+		}
+
+		// Date range filters
+		if filter.StartDate != nil {
+			// Solr date format: 2006-01-02T15:04:05Z
+			fqParts = append(fqParts, fmt.Sprintf("case_createdDate:[%s TO *]", filter.StartDate.Format("2006-01-02T15:04:05Z")))
+		}
+		if filter.EndDate != nil {
+			fqParts = append(fqParts, fmt.Sprintf("case_createdDate:[* TO %s]", filter.EndDate.Format("2006-01-02T15:04:05Z")))
+		}
+
+		// Exclude closed by default unless IncludeClosed is true
+		if !filter.IncludeClosed && len(filter.Status) == 0 {
+			fqParts = append(fqParts, "-case_status:\"Closed\"")
+		}
 	}
 
 	// Build the expression string
