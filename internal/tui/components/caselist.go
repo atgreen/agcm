@@ -164,10 +164,8 @@ func (c *CaseList) ScrollDown(n int) {
 
 // ScrollToRelativeLine sets scroll position based on a relative line in the list area.
 func (c *CaseList) ScrollToRelativeLine(line int) {
+	// Use loaded cases only - scrollbar represents currently available content
 	totalRows := len(c.cases)
-	if c.totalCount > totalRows {
-		totalRows = c.totalCount
-	}
 	visibleRows := c.visibleRows()
 	if totalRows <= visibleRows || visibleRows <= 0 {
 		return
@@ -184,37 +182,44 @@ func (c *CaseList) ScrollToRelativeLine(line int) {
 		areaHeight = innerHeight
 	}
 
+	// Calculate thumb size to match renderScrollbar
+	thumbSize := 1
+	if areaHeight > 0 && totalRows > 0 {
+		thumbSize = maxInt(1, areaHeight*visibleRows/totalRows)
+	}
+	trackHeight := areaHeight - thumbSize
+	if trackHeight < 1 {
+		trackHeight = 1
+	}
+
+	// Clamp line to valid range
 	if line < areaTop {
 		line = areaTop
 	}
-	if line > innerHeight-1 {
-		line = innerHeight - 1
+	if line > areaTop+trackHeight {
+		line = areaTop + trackHeight
 	}
 
 	maxScroll := totalRows - visibleRows
-	if areaHeight <= 1 {
-		c.offset = maxScroll
-		if maxLoaded := len(c.cases) - visibleRows; maxLoaded >= 0 && c.offset > maxLoaded {
-			c.offset = maxLoaded
-		}
+	if maxScroll <= 0 {
+		c.offset = 0
 		return
 	}
+
+	// Calculate offset from relative position in track
 	rel := line - areaTop
 	if rel < 0 {
 		rel = 0
 	}
-	if rel > areaHeight-1 {
-		rel = areaHeight - 1
+	offset := 0
+	if trackHeight > 0 {
+		offset = rel * maxScroll / trackHeight
 	}
-	offset := rel * maxScroll / (areaHeight - 1)
 	if offset < 0 {
 		offset = 0
 	}
 	if offset > maxScroll {
 		offset = maxScroll
-	}
-	if maxLoaded := len(c.cases) - visibleRows; maxLoaded >= 0 && offset > maxLoaded {
-		offset = maxLoaded
 	}
 	c.offset = offset
 }
@@ -479,10 +484,8 @@ func (c *CaseList) renderScrollbar(height int) string {
 		return ""
 	}
 
+	// Use loaded cases only - scrollbar represents currently available content
 	totalRows := len(c.cases)
-	if c.totalCount > totalRows {
-		totalRows = c.totalCount
-	}
 	visibleRows := c.visibleRows()
 	if totalRows <= visibleRows || visibleRows <= 0 {
 		return strings.Repeat("  \n", height-1) + "  "

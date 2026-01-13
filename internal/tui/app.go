@@ -928,17 +928,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.sortCases()
 			if msg.append {
+				// Stop any active scrollbar drag - case count changed so drag math is invalid
+				m.listScrollDrag = false
+				// Restore cursor position first (this calls ensureVisible which may change offset)
 				if selectedCase != "" {
 					for i, c := range m.cases {
 						if c.CaseNumber == selectedCase {
-							m.caseList.SetOffset(savedOffset)
 							m.caseList.SetCursor(i)
 							break
 						}
 					}
-				} else {
-					m.caseList.SetOffset(savedOffset)
 				}
+				// Then restore scroll offset (overrides ensureVisible's changes)
+				m.caseList.SetOffset(savedOffset)
 			}
 			m.caseList.SetTotalCount(m.totalCases)
 			// Update filter bar
@@ -1167,13 +1169,18 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			return nil
 		}
 		if msg.Action == tea.MouseActionMotion && m.listScrollDrag {
-			// Continue dragging list scrollbar thumb
-			if msg.Y > listTop && msg.Y < m.detailY {
-				relY := msg.Y - (listTop + 1)
-				m.caseList.ScrollToRelativeLine(relY)
-				if cmd := m.maybeLoadMoreCases(); cmd != nil {
-					return cmd
-				}
+			// Continue dragging list scrollbar thumb (clamp Y to valid range)
+			y := msg.Y
+			if y <= listTop {
+				y = listTop + 1
+			}
+			if y >= m.detailY {
+				y = m.detailY - 1
+			}
+			relY := y - (listTop + 1)
+			m.caseList.ScrollToRelativeLine(relY)
+			if cmd := m.maybeLoadMoreCases(); cmd != nil {
+				return cmd
 			}
 			return nil
 		}
@@ -1216,21 +1223,25 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			return nil
 		}
 
-		// Click on list scrollbar area (right-most 2 columns inside border)
-		if msg.Y > listTop && msg.Y < m.detailY && msg.X >= m.width-3 && msg.X <= m.width-2 {
+		// Click on list scrollbar area (right-most 5 columns)
+		if msg.Y > listTop && msg.Y < m.detailY && msg.X >= m.width-5 {
 			m.listScrollDrag = true
-			relY := msg.Y - (listTop + 1)
+			y := msg.Y
+			if y <= listTop {
+				y = listTop + 1
+			}
+			relY := y - (listTop + 1)
 			m.caseList.ScrollToRelativeLine(relY)
 			return m.maybeLoadMoreCases()
 		}
 
-		// Click in case list data area
-		if msg.Y > listHeaderY+1 && msg.Y < m.detailY {
+		// Click in case list data area (not on scrollbar)
+		if msg.Y > listHeaderY+1 && msg.Y < m.detailY && msg.X < m.width-5 {
 			m.currentPane = PaneList
 			m.updateFocus()
 
-			// Calculate which row was clicked (header=1, border=1, colheader=1, separator=1)
-			rowOffset := msg.Y - headerHeight - 3
+			// Calculate which row was clicked (listTop + border=1, colheader=1, separator=1)
+			rowOffset := msg.Y - listTop - 3
 			if rowOffset >= 0 {
 				clickedIdx := m.caseList.GetOffset() + rowOffset
 				if clickedIdx >= 0 && clickedIdx < len(m.cases) {
