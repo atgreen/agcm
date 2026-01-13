@@ -1370,7 +1370,7 @@ func (m *Model) View() string {
 		versionText = " " + m.opts.Version
 	}
 	sortInfo := fmt.Sprintf(" [Sort: %s]", m.sortField.String())
-	headerText := "agcm" + m.styles.Muted.Render(versionText) + m.styles.Muted.Render(sortInfo)
+	headerText := "agcm" + versionText + m.styles.Muted.Render(sortInfo)
 	if m.layoutDebug != "" {
 		headerText += m.styles.Muted.Render(m.layoutDebug)
 	}

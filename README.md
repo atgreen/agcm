@@ -38,6 +38,20 @@ agcm uses offline tokens for authentication with the Red Hat Customer Portal API
 2. Run `agcm auth login` and paste your token when prompted
 3. Start the TUI with `agcm`
 
+### Token Storage
+
+Tokens are stored securely using your system's native credential manager:
+
+| OS | Storage Location |
+|----|------------------|
+| **macOS** | Keychain (Keychain Access app) |
+| **Windows** | Credential Manager |
+| **Linux** | Secret Service API (GNOME Keyring / KDE Wallet) |
+
+On headless systems where no keyring is available, tokens fall back to file-based storage in the config directory.
+
+Use `agcm auth status` to check which storage method is being used.
+
 ### Config File
 
 Configuration is stored at `~/.config/agcm/config.yaml`:
