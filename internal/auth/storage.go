@@ -72,7 +72,7 @@ func (s *Storage) SaveToken(token string) error {
 		err := keyring.Set(keyringService, keyringUser, token)
 		if err == nil {
 			// Remove any old file-based token
-			s.deleteFileToken()
+			_ = s.deleteFileToken()
 			return nil
 		}
 		// Fall through to file storage if keyring fails
