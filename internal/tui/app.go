@@ -103,14 +103,15 @@ type Model struct {
 	filePicker *components.FilePickerDialog
 
 	// State
-	currentPane      Pane
-	showHelp         bool
-	cases            []api.Case
-	sortField        SortField
-	sortReverse      bool
-	err              error
-	loadingCases     bool
-	loadingDetail    bool
+	currentPane       Pane
+	showHelp          bool
+	cases             []api.Case
+	sortField         SortField
+	sortReverse       bool
+	err               error
+	loadingCases      bool
+	loadingDetail     bool
+	initialLoadDone   bool // Set true after first successful case load
 	highlightedCase  string // Currently highlighted case number
 	pendingFetch     string // Case number waiting to be fetched (debounce)
 	detailCache      map[string]*CachedCaseDetail
@@ -243,6 +244,7 @@ func (m *Model) Init() tea.Cmd {
 		m.loadCasesPage(0, false),
 		tea.EnterAltScreen,
 		m.spinner.Tick,
+		m.statusBar.SpinnerTick(),
 	)
 }
 
@@ -948,6 +950,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cases = append(m.cases, msg.cases...)
 			} else {
 				m.cases = msg.cases
+				m.initialLoadDone = true // First load complete
 			}
 			if msg.totalCount > 0 {
 				m.totalCases = msg.totalCount
@@ -1013,8 +1016,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.SetMessage(msg.message, 3*time.Second)
 	}
 
-	// Update status bar
-	m.statusBar.SetLoading(m.loadingCases, "Loading cases...")
+	// Update status bar (only show loading in status bar after initial load; overlay handles initial)
+	m.statusBar.SetLoading(m.loadingCases && m.initialLoadDone, "Loading cases...")
 	statusBar, cmd := m.statusBar.Update(msg)
 	m.statusBar = statusBar
 	cmds = append(cmds, cmd)
@@ -1385,6 +1388,10 @@ func (m *Model) waitExportProgress() tea.Cmd {
 // View implements tea.Model
 func (m *Model) View() string {
 	if !m.ready {
+		// Show a simple loading message with spinner before window size is known
+		if m.loadingCases {
+			return m.spinner.View() + " Loading cases..."
+		}
 		return "Loading..."
 	}
 
@@ -1472,6 +1479,11 @@ func (m *Model) View() string {
 	// Text search bar overlay (bottom of screen)
 	if m.textSearchMode && m.textSearch.IsVisible() {
 		view = overlayBottom(view, m.textSearch.View(), m.width, m.height)
+	}
+
+	// Loading cases overlay (show until first successful case load)
+	if !m.initialLoadDone {
+		view = overlayCenter(view, m.renderLoadingBox(), m.width, m.height)
 	}
 
 	// Enforce exact height to prevent terminal scrolling
@@ -1641,6 +1653,18 @@ func (m *Model) renderDetailWithSpinner(detail string) string {
 		lipgloss.Center,
 		spinnerBox,
 	)
+}
+
+// renderLoadingBox renders a centered loading box with spinner
+func (m *Model) renderLoadingBox() string {
+	spinnerText := m.spinner.View() + " Loading cases..."
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.styles.Header.GetBackground()).
+		Padding(1, 3)
+
+	return boxStyle.Render(spinnerText)
 }
 
 func (m *Model) renderHelp() string {
