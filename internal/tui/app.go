@@ -589,6 +589,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					exportCmd = m.startSingleExport(m.exportCaseNumber, m.exportPath)
 				case "bulk":
 					exportCmd = m.startBulkExport(m.exportPath)
+				case "bundle":
+					exportCmd = m.startBundleExport(m.exportPath)
 				}
 				m.pendingExport = ""
 				m.exportPath = ""
@@ -969,6 +971,29 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Bundle export (B) - export to bundled markdown files
+		if msg.String() == "B" {
+			if len(m.cases) > 0 {
+				m.pendingExport = "bundle"
+				cmd := m.filePicker.Show(
+					"Bundle Export",
+					fmt.Sprintf("Select directory for %d cases (4MB bundles)", len(m.cases)),
+					components.FilePickerModeDir,
+					"./exports",
+					func(dir string) {
+						m.exportPath = dir
+					},
+					func() {
+						m.pendingExport = ""
+					},
+				)
+				return m, cmd
+			} else {
+				m.statusBar.SetMessage(m.styles.Warning.Render("No cases loaded"), 2*time.Second)
+			}
+			return m, nil
+		}
+
 		// Global left/right for tab switching in detail pane
 		if key.Matches(msg, m.keys.Left) || key.Matches(msg, m.keys.Right) {
 			// Switch focus to detail pane when using left/right
@@ -1178,6 +1203,112 @@ func (m *Model) startBulkExport(outputDir string) tea.Cmd {
 		absPath, _ := filepath.Abs(outputDir)
 		return exportCompleteMsg{outputPath: absPath, err: err}
 	}
+	return tea.Batch(exportCmd, m.waitExportProgress())
+}
+
+const maxBundleSize = 4 * 1024 * 1024 // 4MB
+
+func (m *Model) startBundleExport(outputDir string) tea.Cmd {
+	m.exporting = true
+	ctx, cancel := context.WithCancel(context.Background())
+	m.exportCancel = cancel
+	m.modal.ShowProgress("Bundle Export", "Starting bundle export...")
+	progressCh := make(chan export.Progress, 10)
+	m.exportProgressCh = progressCh
+
+	exportCmd := func() tea.Msg {
+		// Create output directory
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return exportCompleteMsg{err: fmt.Errorf("failed to create output directory: %w", err)}
+		}
+
+		// Get all case numbers
+		caseNumbers, err := m.fetchAllCaseNumbers(ctx)
+		if err != nil {
+			return exportCompleteMsg{err: err}
+		}
+
+		formatter, err := export.NewFormatter()
+		if err != nil {
+			return exportCompleteMsg{err: fmt.Errorf("failed to create formatter: %w", err)}
+		}
+
+		totalCases := len(caseNumbers)
+		bundleNum := 1
+		var currentBundle strings.Builder
+		casesInBundle := 0
+
+		for i, caseNum := range caseNumbers {
+			select {
+			case <-ctx.Done():
+				return exportCompleteMsg{err: ctx.Err()}
+			default:
+			}
+
+			// Send progress
+			progressCh <- export.Progress{
+				TotalCases:     totalCases,
+				CompletedCases: i,
+				CurrentCase:    caseNum,
+				CurrentStep:    fmt.Sprintf("Fetching case %d/%d", i+1, totalCases),
+			}
+
+			// Fetch case details
+			caseDetail, err := m.client.GetCase(ctx, caseNum)
+			if err != nil {
+				continue // Skip failed cases
+			}
+
+			// Fetch comments
+			comments, _ := m.client.GetCaseComments(ctx, caseNum)
+
+			// Format case (without attachments)
+			caseExport := &export.CaseExport{
+				Case:        caseDetail,
+				Comments:    comments,
+				Attachments: nil, // No attachments in bundle
+				ExportedAt:  time.Now(),
+			}
+
+			caseMarkdown, err := formatter.FormatCase(caseExport)
+			if err != nil {
+				continue
+			}
+
+			// Check if adding this case would exceed bundle size
+			newSize := currentBundle.Len() + len(caseMarkdown) + 10 // +10 for separator
+			if currentBundle.Len() > 0 && newSize > maxBundleSize {
+				// Write current bundle and start new one
+				bundlePath := filepath.Join(outputDir, fmt.Sprintf("export-bundle-%d.md", bundleNum))
+				if err := os.WriteFile(bundlePath, []byte(currentBundle.String()), 0644); err != nil {
+					return exportCompleteMsg{err: fmt.Errorf("failed to write bundle %d: %w", bundleNum, err)}
+				}
+				bundleNum++
+				currentBundle.Reset()
+				casesInBundle = 0
+			}
+
+			// Add separator if not first case in bundle
+			if casesInBundle > 0 {
+				currentBundle.WriteString("\n\n---\n\n")
+			}
+			currentBundle.WriteString(caseMarkdown)
+			casesInBundle++
+		}
+
+		// Write final bundle if it has content
+		if currentBundle.Len() > 0 {
+			bundlePath := filepath.Join(outputDir, fmt.Sprintf("export-bundle-%d.md", bundleNum))
+			if err := os.WriteFile(bundlePath, []byte(currentBundle.String()), 0644); err != nil {
+				return exportCompleteMsg{err: fmt.Errorf("failed to write bundle %d: %w", bundleNum, err)}
+			}
+		}
+
+		close(progressCh)
+		absPath, _ := filepath.Abs(outputDir)
+		return exportCompleteMsg{outputPath: absPath}
+	}
+
 	return tea.Batch(exportCmd, m.waitExportProgress())
 }
 
@@ -1903,6 +2034,7 @@ func (m *Model) renderHelp() string {
 		{"r", "Refresh"},
 		{"e", "Export current case"},
 		{"E", "Export all cases"},
+		{"B", "Bundle export (4MB files)"},
 		{"Right-click", "Open case in browser"},
 		{"Click link", "Open URL"},
 		{"?", "Toggle help"},

@@ -159,6 +159,7 @@ agcm update --check     # Check for updates without installing
 | `r` | Refresh |
 | `e` | Export current case |
 | `E` | Export all cases |
+| `B` | Bundle export (4MB markdown files) |
 | `?` | Toggle help |
 | `q` | Quit |
 
