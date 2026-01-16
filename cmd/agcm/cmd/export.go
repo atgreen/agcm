@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -41,11 +42,14 @@ var exportCasesCmd = &cobra.Command{
 You can use a saved filter preset (0-9) created in the TUI, and/or CLI flags.
 If only a preset number is provided with no matching preset saved, nothing is exported.
 
+Use --bundle to create 4MB markdown files suitable for AI tool uploads.
+
 Examples:
   agcm export cases 1                              # Export using preset 1
   agcm export cases --status open                  # Export open cases
   agcm export cases 1 --severity 1,2               # Preset 1 + severity filter
-  agcm export cases --product "RHEL" --since 2024-01-01`,
+  agcm export cases --bundle 1                     # Bundle export using preset 1
+  agcm export cases --bundle --status open         # Bundle export open cases`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runExportCases,
 }
@@ -56,6 +60,7 @@ var (
 	exportOutputDir       string
 	exportFormat          string
 	exportCombined        bool
+	exportBundle          bool
 	exportIncludeAttach   bool
 	exportAttachmentsDir  string
 	exportTemplate        string
@@ -87,6 +92,7 @@ func init() {
 	exportCasesCmd.Flags().StringVarP(&exportOutputDir, "output-dir", "d", "./exports", "output directory")
 	exportCasesCmd.Flags().StringVar(&exportFormat, "format", "markdown", "output format (markdown, json)")
 	exportCasesCmd.Flags().BoolVar(&exportCombined, "combined", false, "combine all cases into single file")
+	exportCasesCmd.Flags().BoolVar(&exportBundle, "bundle", false, "bundle into 4MB markdown files (for AI tools)")
 	exportCasesCmd.Flags().BoolVar(&exportIncludeAttach, "include-attachments", false, "download attachments")
 	exportCasesCmd.Flags().StringVar(&exportAttachmentsDir, "attachments-dir", "attachments", "attachments directory name")
 	exportCasesCmd.Flags().StringVar(&exportTemplate, "template", "", "custom Go template file")
@@ -258,6 +264,11 @@ func runExportCases(cmd *cobra.Command, args []string) error {
 		filter.GroupNumber = exportGroup
 	}
 
+	// Handle bundle export mode
+	if exportBundle {
+		return runBundleExport(client, filter)
+	}
+
 	opts := &export.Options{
 		OutputDir:          exportOutputDir,
 		Format:             exportFormat,
@@ -306,5 +317,100 @@ func runExportCases(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	return nil
+}
+
+const maxBundleSize = 4 * 1024 * 1024 // 4MB
+
+func runBundleExport(client *api.Client, filter *api.CaseFilter) error {
+	ctx := context.Background()
+
+	// Create output directory
+	if err := os.MkdirAll(exportOutputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	// Fetch cases matching filter
+	fmt.Println("Fetching cases matching filters...")
+	result, err := client.ListCases(ctx, filter)
+	if err != nil {
+		return fmt.Errorf("failed to list cases: %w", err)
+	}
+
+	if len(result.Items) == 0 {
+		fmt.Println("No cases found matching the criteria.")
+		return nil
+	}
+
+	formatter, err := export.NewFormatter()
+	if err != nil {
+		return fmt.Errorf("failed to create formatter: %w", err)
+	}
+
+	totalCases := len(result.Items)
+	bundleNum := 1
+	var currentBundle strings.Builder
+	casesInBundle := 0
+	casesExported := 0
+
+	for i, c := range result.Items {
+		fmt.Printf("\r[%d/%d] Fetching %s...          ", i+1, totalCases, c.CaseNumber)
+
+		// Fetch full case details
+		caseDetail, err := client.GetCase(ctx, c.CaseNumber)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "\nWarning: failed to fetch case %s: %v\n", c.CaseNumber, err)
+			continue
+		}
+
+		// Fetch comments
+		comments, _ := client.GetCaseComments(ctx, c.CaseNumber)
+
+		// Format case (without attachments)
+		caseExport := &export.CaseExport{
+			Case:        caseDetail,
+			Comments:    comments,
+			Attachments: nil,
+			ExportedAt:  time.Now(),
+		}
+
+		caseMarkdown, err := formatter.FormatCase(caseExport)
+		if err != nil {
+			continue
+		}
+
+		// Check if adding this case would exceed bundle size
+		newSize := currentBundle.Len() + len(caseMarkdown) + 10
+		if currentBundle.Len() > 0 && newSize > maxBundleSize {
+			// Write current bundle and start new one
+			bundlePath := filepath.Join(exportOutputDir, fmt.Sprintf("export-bundle-%d.md", bundleNum))
+			if err := os.WriteFile(bundlePath, []byte(currentBundle.String()), 0644); err != nil {
+				return fmt.Errorf("failed to write bundle %d: %w", bundleNum, err)
+			}
+			fmt.Printf("\nWrote %s (%d cases)\n", bundlePath, casesInBundle)
+			bundleNum++
+			currentBundle.Reset()
+			casesInBundle = 0
+		}
+
+		// Add separator if not first case in bundle
+		if casesInBundle > 0 {
+			currentBundle.WriteString("\n\n---\n\n")
+		}
+		currentBundle.WriteString(caseMarkdown)
+		casesInBundle++
+		casesExported++
+	}
+
+	// Write final bundle if it has content
+	if currentBundle.Len() > 0 {
+		bundlePath := filepath.Join(exportOutputDir, fmt.Sprintf("export-bundle-%d.md", bundleNum))
+		if err := os.WriteFile(bundlePath, []byte(currentBundle.String()), 0644); err != nil {
+			return fmt.Errorf("failed to write bundle %d: %w", bundleNum, err)
+		}
+		fmt.Printf("\nWrote %s (%d cases)\n", bundlePath, casesInBundle)
+	}
+
+	fmt.Printf("\nBundle export complete: %d cases in %d file(s)\n", casesExported, bundleNum)
 	return nil
 }

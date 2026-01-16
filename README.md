@@ -118,6 +118,7 @@ agcm export case 01234567 01234568  # Export multiple cases
 agcm export cases 1                 # Export using filter preset 1
 agcm export cases --status open     # Export filtered cases
 agcm export cases 1 -d ./exports    # Preset with output dir override
+agcm export cases --bundle 1        # Bundle export for AI tools (4MB files)
 ```
 
 #### Search
