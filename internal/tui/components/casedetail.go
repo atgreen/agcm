@@ -33,8 +33,13 @@ type CaseDetail struct {
 	activeTab       int    // 0=details, 1=comments, 2=attachments
 	currentComment  int    // Current comment index for n/p navigation
 	commentOffsets  []int  // Line offsets for each comment
-	searchHighlight string // Current search highlight term
-	maskMode        bool   // Mask sensitive text for screenshots
+	searchHighlight  string // Current search highlight term
+	currentMatchTab  int    // Tab index of current match (0=details, 1=comments)
+	currentMatchLine int    // Line number of current match
+	maskMode         bool   // Mask sensitive text for screenshots
+	// matchLineOffsets maps synthetic line numbers to actual viewport lines
+	// Key format: tabIndex*1000000 + syntheticLineNumber
+	matchLineOffsets map[int]int
 }
 
 // SetMaskMode enables/disables text masking for privacy
@@ -119,9 +124,18 @@ func (c *CaseDetail) SetSearchHighlight(query string) {
 	c.updateContent()
 }
 
+// SetCurrentMatch sets which match is currently selected (for different highlighting)
+func (c *CaseDetail) SetCurrentMatch(tabIndex, lineNumber int) {
+	c.currentMatchTab = tabIndex
+	c.currentMatchLine = lineNumber
+	c.updateContent()
+}
+
 // ClearSearchHighlight clears the search highlight
 func (c *CaseDetail) ClearSearchHighlight() {
 	c.searchHighlight = ""
+	c.currentMatchTab = -1
+	c.currentMatchLine = -1
 	c.updateContent()
 }
 
@@ -143,6 +157,22 @@ func (c *CaseDetail) ScrollToLine(line int) {
 		targetOffset = 0
 	}
 	c.viewport.SetYOffset(targetOffset)
+}
+
+// matchOffsetKey generates a key for the matchLineOffsets map
+func matchOffsetKey(tabIndex, syntheticLine int) int {
+	return tabIndex*1000000 + syntheticLine
+}
+
+// ScrollToMatch scrolls to a match using the actual viewport line position
+func (c *CaseDetail) ScrollToMatch(tabIndex, syntheticLine int) {
+	if c.matchLineOffsets == nil {
+		return
+	}
+	key := matchOffsetKey(tabIndex, syntheticLine)
+	if actualLine, ok := c.matchLineOffsets[key]; ok {
+		c.ScrollToLine(actualLine)
+	}
 }
 
 // LinkAt returns the URL at the given viewport-relative coordinates, if any.
@@ -213,20 +243,31 @@ func (c *CaseDetail) updateContent() {
 func (c *CaseDetail) renderDetails() string {
 	var sb strings.Builder
 	cs := c.case_
+	lineCount := 0 // Track actual viewport line number
+
+	// Initialize match offsets map for Details tab (tab 0)
+	if c.matchLineOffsets == nil {
+		c.matchLineOffsets = make(map[int]int)
+	}
 
 	// Header
 	title := c.styles.Title.Render(fmt.Sprintf("Case %s", cs.CaseNumber))
 	sb.WriteString(title)
 	sb.WriteString("\n\n")
+	lineCount += 2
 
-	// Summary (with highlighting)
+	// Summary (with highlighting) - synthetic line 0 in Details tab
 	summary := cs.Summary
 	if c.maskMode {
 		summary = maskText(summary)
 	}
+	isCurrentSummary := c.currentMatchTab == 0 && c.currentMatchLine == 0
 	sb.WriteString(c.styles.Label.Render("Summary: "))
-	sb.WriteString(c.highlightMatches(summary))
+	// Record actual line position for summary (synthetic line 0)
+	c.matchLineOffsets[matchOffsetKey(0, 0)] = lineCount
+	sb.WriteString(c.highlightMatches(summary, isCurrentSummary))
 	sb.WriteString("\n\n")
+	lineCount += 2
 
 	// Contact and account info (possibly masked)
 	contactName := cs.ContactName
@@ -263,21 +304,34 @@ func (c *CaseDetail) renderDetails() string {
 			sb.WriteString(c.styles.Value.Render(row.value))
 		}
 		sb.WriteString("\n")
+		lineCount++
 	}
 
-	// Description
+	// Description - synthetic lines numbered from 1 in Details tab
 	sb.WriteString("\n")
+	lineCount++
 	sb.WriteString(c.styles.Subtitle.Render("Description"))
 	sb.WriteString("\n")
+	lineCount++
 	sb.WriteString(strings.Repeat("─", min(c.width-6, 60)))
 	sb.WriteString("\n")
-	// Apply highlighting first, then linkify
+	lineCount++
+
+	// Apply highlighting line by line to support current match highlighting
 	description := cs.Description
 	if c.maskMode {
 		description = maskText(description)
 	}
-	description = c.highlightMatches(description)
-	sb.WriteString(linkify(description, c.styles.Subtitle))
+	descLines := strings.Split(description, "\n")
+	var highlightedLines []string
+	for i, line := range descLines {
+		// Record actual line position for this description line (synthetic line i+1)
+		c.matchLineOffsets[matchOffsetKey(0, i+1)] = lineCount
+		isCurrentLine := c.currentMatchTab == 0 && c.currentMatchLine == i+1
+		highlightedLines = append(highlightedLines, c.highlightMatches(line, isCurrentLine))
+		lineCount++
+	}
+	sb.WriteString(linkify(strings.Join(highlightedLines, "\n"), c.styles.Subtitle))
 
 	return sb.String()
 }
@@ -290,6 +344,11 @@ func (c *CaseDetail) renderComments() string {
 	var sb strings.Builder
 	c.commentOffsets = make([]int, 0, len(c.comments))
 	lineCount := 0
+
+	// Initialize match offsets map for Comments tab (tab 1)
+	if c.matchLineOffsets == nil {
+		c.matchLineOffsets = make(map[int]int)
+	}
 
 	sb.WriteString(c.styles.Subtitle.Render(fmt.Sprintf("Comments (%d)", len(c.comments))))
 	sb.WriteString("\n\n")
@@ -326,12 +385,23 @@ func (c *CaseDetail) renderComments() string {
 		sb.WriteString(fmt.Sprintf("%s %s • %s • %s\n", numStr, author, date, visStyle.Render(visibility)))
 		lineCount++
 
-		// Comment text (with highlighting)
+		// Comment text (with highlighting) - synthetic line number = i*100 + j in Comments tab
 		commentText := comment.GetText()
 		if c.maskMode {
 			commentText = maskText(commentText)
 		}
-		text := c.highlightMatches(commentText)
+
+		// Highlight each line individually to support current match highlighting
+		commentLines := strings.Split(commentText, "\n")
+		var highlightedCommentLines []string
+		for j, line := range commentLines {
+			matchLineNum := i*100 + j
+			// Record actual line position for this comment line
+			c.matchLineOffsets[matchOffsetKey(1, matchLineNum)] = lineCount + j
+			isCurrentLine := c.currentMatchTab == 1 && c.currentMatchLine == matchLineNum
+			highlightedCommentLines = append(highlightedCommentLines, c.highlightMatches(line, isCurrentLine))
+		}
+		text := strings.Join(highlightedCommentLines, "\n")
 
 		// Indent each line of the comment text
 		lines := strings.Split(linkify(text, c.styles.Subtitle), "\n")
@@ -798,16 +868,28 @@ func linkify(text string, style lipgloss.Style) string {
 }
 
 // highlightMatches highlights all occurrences of query in text (case-insensitive)
-func (c *CaseDetail) highlightMatches(text string) string {
+func (c *CaseDetail) highlightMatches(text string, isCurrentLine bool) string {
 	if c.searchHighlight == "" {
 		return text
 	}
 
-	// Create highlight style - bright yellow background with black text
-	highlightStyle := lipgloss.NewStyle().
+	// Create highlight styles
+	// Regular matches: bright yellow background
+	regularStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color("226")). // Bright yellow
 		Foreground(lipgloss.Color("0")).   // Black text
 		Bold(true)
+
+	// Current match: orange/red background to stand out
+	currentStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("208")). // Orange
+		Foreground(lipgloss.Color("0")).   // Black text
+		Bold(true)
+
+	highlightStyle := regularStyle
+	if isCurrentLine {
+		highlightStyle = currentStyle
+	}
 
 	// Case-insensitive replacement
 	lowerText := strings.ToLower(text)

@@ -3,11 +3,8 @@
 package components
 
 import (
-	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -16,17 +13,43 @@ import (
 	"github.com/green/agcm/internal/tui/styles"
 )
 
-var fpDebugFile *os.File
 
-func init() {
-	fpDebugFile, _ = os.OpenFile("/tmp/agcm-filepicker-debug.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-}
-
-func fpDebugLog(format string, args ...interface{}) {
-	if fpDebugFile != nil {
-		_, _ = fmt.Fprintf(fpDebugFile, time.Now().Format("15:04:05.000")+" "+format+"\n", args...)
-		_ = fpDebugFile.Sync()
+// formatFilePickerOutput post-processes filepicker output to add full-width backgrounds
+func formatFilePickerOutput(output string, width int) string {
+	lines := strings.Split(output, "\n")
+	if len(lines) == 0 {
+		return output
 	}
+
+	cursorBg := lipgloss.NewStyle().Background(lipgloss.Color("238"))
+
+	var result []string
+	for _, line := range lines {
+		if line == "" {
+			result = append(result, line)
+			continue
+		}
+
+		// Check if this is the cursor line (starts with > after stripping ANSI)
+		plainLine := stripAnsi(line)
+		isCursor := strings.HasPrefix(plainLine, ">")
+
+		// Pad the line to full width
+		lineLen := lipgloss.Width(line)
+		padding := ""
+		if lineLen < width {
+			padding = strings.Repeat(" ", width-lineLen)
+		}
+		paddedLine := line + padding
+
+		if isCursor {
+			result = append(result, cursorBg.Render(paddedLine))
+		} else {
+			result = append(result, paddedLine)
+		}
+	}
+
+	return strings.Join(result, "\n")
 }
 
 // FilePickerMode represents the mode of the file picker dialog
@@ -63,10 +86,24 @@ func NewFilePickerDialog(s *styles.Styles) *FilePickerDialog {
 	fp.ShowSize = true
 	fp.SetHeight(15)
 
+	// Style the filepicker for dark background
+	fp.Styles.Cursor = lipgloss.NewStyle().Foreground(lipgloss.Color("212")) // Pink cursor
+	fp.Styles.Symlink = lipgloss.NewStyle().Foreground(lipgloss.Color("36")) // Cyan
+	fp.Styles.Directory = lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true) // Blue, bold
+	fp.Styles.File = lipgloss.NewStyle().Foreground(lipgloss.Color("252")) // Light gray
+	fp.Styles.Permission = lipgloss.NewStyle().Foreground(lipgloss.Color("244")) // Gray
+	fp.Styles.Selected = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true) // Pink, bold
+	fp.Styles.FileSize = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Width(7).Align(lipgloss.Right) // Dim gray, right-aligned
+	fp.Styles.EmptyDirectory = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Italic(true)
+
 	ti := textinput.New()
 	ti.Placeholder = "Enter path..."
 	ti.CharLimit = 256
 	ti.Width = 50
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("33"))       // Blue prompt
+	ti.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))        // White text
+	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Dim placeholder
+	ti.Cursor.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))     // Pink cursor
 
 	return &FilePickerDialog{
 		styles:     s,
@@ -147,7 +184,6 @@ func (f *FilePickerDialog) Update(msg tea.Msg) (*FilePickerDialog, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		fpDebugLog("KeyMsg: %q showInput=%v", msg.String(), f.showInput)
 		switch msg.String() {
 		case "tab":
 			// Toggle between filepicker and text input mode
@@ -165,7 +201,6 @@ func (f *FilePickerDialog) Update(msg tea.Msg) (*FilePickerDialog, tea.Cmd) {
 			return f, nil
 
 		case "esc":
-			fpDebugLog("Esc pressed, cancelling")
 			if f.onCancel != nil {
 				f.onCancel()
 			}
@@ -173,18 +208,14 @@ func (f *FilePickerDialog) Update(msg tea.Msg) (*FilePickerDialog, tea.Cmd) {
 			return f, nil
 
 		case "enter":
-			fpDebugLog("Enter pressed, showInput=%v", f.showInput)
 			if f.showInput {
 				// Use the text input value
 				path := f.textInput.Value()
-				fpDebugLog("Text input value: %q", path)
 				if path != "" {
-					fpDebugLog("Calling onConfirm with path: %s", path)
 					if f.onConfirm != nil {
 						f.onConfirm(path)
 					}
 					f.Hide()
-					fpDebugLog("Hidden, visible=%v", f.visible)
 				}
 				return f, nil
 			}
@@ -193,7 +224,6 @@ func (f *FilePickerDialog) Update(msg tea.Msg) (*FilePickerDialog, tea.Cmd) {
 		case " ": // Space to select current directory in dir mode
 			if f.mode == FilePickerModeDir && !f.showInput {
 				path := f.filepicker.CurrentDirectory
-				fpDebugLog("Space pressed, selecting dir: %s", path)
 				if f.onConfirm != nil {
 					f.onConfirm(path)
 				}
@@ -217,7 +247,6 @@ func (f *FilePickerDialog) Update(msg tea.Msg) (*FilePickerDialog, tea.Cmd) {
 
 	// Check if a file/dir was selected
 	if didSelect, path := f.filepicker.DidSelectFile(msg); didSelect {
-		fpDebugLog("File selected via filepicker: %s", path)
 		f.selectedPath = path
 		if f.onConfirm != nil {
 			f.onConfirm(path)
@@ -237,33 +266,41 @@ func (f *FilePickerDialog) View() string {
 
 	var content strings.Builder
 
-	// Title
-	content.WriteString(f.styles.Title.Render(f.title))
+	// Title - bright white for visibility
+	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Bold(true)
+	content.WriteString(titleStyle.Render(f.title))
 	content.WriteString("\n")
 
-	// Message
+	// Message - light gray
 	if f.message != "" {
-		content.WriteString(f.styles.Muted.Render(f.message))
+		msgStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+		content.WriteString(msgStyle.Render(f.message))
 		content.WriteString("\n")
 	}
 
-	// Current directory
-	dirStyle := f.styles.Label.Bold(true)
+	// Current directory - use explicit light styling for dark background
+	dirStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true) // Blue
 	content.WriteString(dirStyle.Render("📁 " + f.filepicker.CurrentDirectory))
 	content.WriteString("\n")
-	content.WriteString(strings.Repeat("─", 50))
+	separatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Dim gray
+	content.WriteString(separatorStyle.Render(strings.Repeat("─", 50)))
 	content.WriteString("\n")
+
+	// Style definitions for dark background
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Bold(true)
+	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Italic(true)
 
 	if f.showInput {
 		// Text input mode
 		content.WriteString("\n")
-		content.WriteString(f.styles.Label.Render("Path: "))
+		content.WriteString(labelStyle.Render("Path: "))
 		content.WriteString(f.textInput.View())
 		content.WriteString("\n\n")
-		content.WriteString(f.styles.Muted.Render("Enter to confirm • Tab to browse • Esc to cancel"))
+		content.WriteString(helpStyle.Render("Enter to confirm • Tab to browse • Esc to cancel"))
 	} else {
-		// File picker mode
-		content.WriteString(f.filepicker.View())
+		// File picker mode - format output for alignment and full-width backgrounds
+		fpOutput := formatFilePickerOutput(f.filepicker.View(), min(56, f.width-8))
+		content.WriteString(fpOutput)
 		content.WriteString("\n")
 
 		// Help text based on mode
@@ -273,14 +310,15 @@ func (f *FilePickerDialog) View() string {
 		} else {
 			helpText = "Enter to select file • Tab to type path • Esc to cancel"
 		}
-		content.WriteString(f.styles.Muted.Render(helpText))
+		content.WriteString(helpStyle.Render(helpText))
 	}
 
-	// Modal box style with background
+	// Modal box style with dark background for better contrast
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(f.styles.Header.GetBackground()).
-		Background(lipgloss.Color("248")).
+		BorderForeground(lipgloss.Color("33")). // Blue border
+		Background(lipgloss.Color("235")).      // Dark gray background
+		Foreground(lipgloss.Color("252")).      // Light gray text
 		Padding(1, 2).
 		Width(min(60, f.width-4))
 

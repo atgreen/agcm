@@ -85,6 +85,13 @@ Filter, sort, search, and export cases to markdown.`,
 		// Launch TUI
 		return tui.Run(apiClient, opts, configMgr)
 	},
+	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+		// Clean up resources
+		if apiClient != nil {
+			return apiClient.Close()
+		}
+		return nil
+	},
 }
 
 func Execute() {

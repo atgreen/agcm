@@ -24,18 +24,6 @@ import (
 	"github.com/green/agcm/internal/tui/styles"
 )
 
-var debugFile *os.File
-
-func init() {
-	debugFile, _ = os.OpenFile("/tmp/agcm-export-debug.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-}
-
-func debugLog(format string, args ...interface{}) {
-	if debugFile != nil {
-		_, _ = fmt.Fprintf(debugFile, time.Now().Format("15:04:05.000")+" "+format+"\n", args...)
-		_ = debugFile.Sync()
-	}
-}
 
 // Pane represents which pane is focused
 type Pane int
@@ -594,9 +582,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// If file picker is no longer visible and we have a pending export with path, start it
 		if !m.filePicker.IsVisible() {
-			debugLog("File picker closed. pendingExport=%s exportPath=%s", m.pendingExport, m.exportPath)
 			if m.pendingExport != "" && m.exportPath != "" {
-				debugLog("Starting export...")
 				var exportCmd tea.Cmd
 				switch m.pendingExport {
 				case "single":
@@ -648,6 +634,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				matches := m.searchInCase(queryMsg.Query)
 				m.textSearch.SetMatches(matches)
 				m.caseDetail.SetSearchHighlight(queryMsg.Query)
+				// Set the first match as current and scroll to it
+				if len(matches) > 0 {
+					m.caseDetail.SetActiveTab(matches[0].TabIndex)
+					m.caseDetail.SetCurrentMatch(matches[0].TabIndex, matches[0].LineNumber)
+					m.caseDetail.ScrollToMatch(matches[0].TabIndex, matches[0].LineNumber)
+				}
 			} else {
 				m.textSearch.SetMatches(nil)
 				m.caseDetail.ClearSearchHighlight()
@@ -660,7 +652,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if navMsg.Match != nil {
 				// Switch to the tab containing the match and scroll to it
 				m.caseDetail.SetActiveTab(navMsg.Match.TabIndex)
-				m.caseDetail.ScrollToLine(navMsg.Match.LineNumber)
+				// Update the current match highlighting (must happen before scroll to update line offsets)
+				m.caseDetail.SetCurrentMatch(navMsg.Match.TabIndex, navMsg.Match.LineNumber)
+				// Scroll to the actual viewport line for this match
+				m.caseDetail.ScrollToMatch(navMsg.Match.TabIndex, navMsg.Match.LineNumber)
 			}
 			return m, nil
 		}
@@ -772,6 +767,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			matches := m.searchInCase(msg.Query)
 			m.textSearch.SetMatches(matches)
 			m.caseDetail.SetSearchHighlight(msg.Query)
+			// Set the first match as current and scroll to it
+			if len(matches) > 0 {
+				m.caseDetail.SetActiveTab(matches[0].TabIndex)
+				m.caseDetail.SetCurrentMatch(matches[0].TabIndex, matches[0].LineNumber)
+				m.caseDetail.ScrollToMatch(matches[0].TabIndex, matches[0].LineNumber)
+			}
 		} else {
 			m.textSearch.SetMatches(nil)
 			m.caseDetail.ClearSearchHighlight()
@@ -916,9 +917,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Export current case (e)
 		if key.Matches(msg, m.keys.Export) {
-			debugLog("Export key pressed")
 			if c := m.caseDetail.GetCase(); c != nil {
-				debugLog("Case found: %s", c.CaseNumber)
 				m.pendingExport = "single"
 				m.exportCaseNumber = c.CaseNumber
 				defaultName := fmt.Sprintf("case-%s.md", c.CaseNumber)
@@ -928,17 +927,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					components.FilePickerModeFile,
 					defaultName,
 					func(filename string) {
-						debugLog("File picker callback: filename=%s", filename)
 						m.exportPath = filename
 					},
 					func() {
-						debugLog("File picker cancelled")
 						m.pendingExport = ""
 					},
 				)
 				return m, cmd
 			} else {
-				debugLog("No case selected")
 				m.statusBar.SetMessage(m.styles.Warning.Render("No case selected"), 2*time.Second)
 			}
 			return m, nil
@@ -1129,26 +1125,22 @@ func (m *Model) startSingleExport(caseNumber, filename string) tea.Cmd {
 
 	return func() tea.Msg {
 		// Debug: log export attempt
-		debugLog("startSingleExport: caseNumber=%s filename=%s", caseNumber, filename)
 
 		opts := export.DefaultOptions()
 		opts.OutputFile = filename
 
 		exporter, err := export.NewExporter(m.client, opts)
 		if err != nil {
-			debugLog("startSingleExport: NewExporter error: %v", err)
 			return exportCompleteMsg{err: err}
 		}
 
 		ctx := context.Background()
 		err = exporter.ExportCaseToFile(ctx, caseNumber, filename)
 		if err != nil {
-			debugLog("startSingleExport: ExportCaseToFile error: %v", err)
 			return exportCompleteMsg{err: err}
 		}
 
 		absPath, _ := filepath.Abs(filename)
-		debugLog("startSingleExport: success, outputPath=%s", absPath)
 		return exportCompleteMsg{outputPath: absPath}
 	}
 }
@@ -1241,8 +1233,6 @@ func (m *Model) updateLayout() {
 
 	if os.Getenv("AGCM_DEBUG_LAYOUT") != "" {
 		totalUsed := headerHeight + footerHeight + filterBarHeight + listHeight + detailHeight
-		debugLog("layout: term=%dx%d content=%d list=%d detail=%d header=%d footer=%d filter=%d total=%d",
-			m.width, m.height, contentHeight, listHeight, detailHeight, headerHeight, footerHeight, filterBarHeight, totalUsed)
 		m.layoutDebug = fmt.Sprintf("DEBUG term %dx%d content %d list %d detail %d total %d", m.width, m.height, contentHeight, listHeight, detailHeight, totalUsed)
 	} else {
 		m.layoutDebug = ""
@@ -1500,14 +1490,12 @@ func (m *Model) View() string {
 		Width(m.width).
 		Render(headerText)
 	header = trimTrailingNewlines(header)
-	headerLines := countLines(header)
 
 	// Filter bar (conditional)
 	filterBar := ""
 	if m.filterBar.HasActiveFilter() {
 		filterBar = trimTrailingNewlines(m.filterBar.View())
 	}
-	filterBarLines := countLines(filterBar)
 
 	// Main content area
 	var content string
@@ -1517,9 +1505,6 @@ func (m *Model) View() string {
 	} else {
 		list := trimTrailingNewlines(m.caseList.View())
 		detail := trimTrailingNewlines(m.caseDetail.View())
-		if os.Getenv("AGCM_DEBUG_LAYOUT") != "" {
-			debugLog("component lines: list=%d detail=%d", countLines(list), countLines(detail))
-		}
 
 		// If loading cases (after initial load), overlay spinner on list pane
 		if m.loadingCases && m.initialLoadDone {
@@ -1533,11 +1518,9 @@ func (m *Model) View() string {
 
 		content = lipgloss.JoinVertical(lipgloss.Left, list, detail)
 	}
-	contentLines := countLines(content)
 
 	// Footer/Status bar
 	footer := trimTrailingNewlines(m.statusBar.View())
-	footerLines := countLines(footer)
 
 	// Build view with optional filter bar
 	var view string
@@ -1545,11 +1528,6 @@ func (m *Model) View() string {
 		view = lipgloss.JoinVertical(lipgloss.Left, header, filterBar, content, footer)
 	} else {
 		view = lipgloss.JoinVertical(lipgloss.Left, header, content, footer)
-	}
-	if os.Getenv("AGCM_DEBUG_LAYOUT") != "" {
-		debugLog("component totals: header=%d filter=%d content=%d footer=%d sum=%d",
-			headerLines, filterBarLines, contentLines, footerLines,
-			headerLines+filterBarLines+contentLines+footerLines)
 	}
 
 	// Quick search overlay
@@ -1590,9 +1568,6 @@ func (m *Model) View() string {
 
 	// Enforce exact height to prevent terminal scrolling
 	lines := strings.Split(view, "\n")
-	if os.Getenv("AGCM_DEBUG_LAYOUT") != "" && len(lines) != m.height {
-		debugLog("render: lines=%d height=%d width=%d", len(lines), m.height, m.width)
-	}
 	if len(lines) > m.height {
 		lines = lines[:m.height]
 	}
@@ -1738,13 +1713,6 @@ func overlayAt(background, overlay string, x, y, width, height int) string {
 
 func trimTrailingNewlines(s string) string {
 	return strings.TrimRight(s, "\n")
-}
-
-func countLines(s string) int {
-	if s == "" {
-		return 0
-	}
-	return strings.Count(s, "\n") + 1
 }
 
 // ansiCut cuts a string with ANSI codes at the given visual positions

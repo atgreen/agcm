@@ -250,9 +250,14 @@ func runExportCases(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Exported %d cases to %s\n", len(manifest.Cases), exportOutputDir)
 		fmt.Printf("Manifest: %s/export-manifest.json\n", exportOutputDir)
 
-		// Record filters in manifest
+		// Record filters in manifest and re-save
 		if filter.Status != nil || filter.Severity != nil || len(filter.Products) > 0 {
 			manifest.SetFilters(filter.Status, filter.Severity, filter.Products, exportSince, exportUntil)
+			// Re-save manifest with filter metadata
+			manifestPath := exportOutputDir + "/export-manifest.json"
+			if err := manifest.Save(manifestPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to save manifest with filters: %v\n", err)
+			}
 		}
 	}
 

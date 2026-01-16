@@ -92,6 +92,16 @@ func NewClient(opts ...ClientOption) *Client {
 	return c
 }
 
+// Close releases resources held by the client
+func (c *Client) Close() error {
+	if c.debugFile != nil {
+		err := c.debugFile.Close()
+		c.debugFile = nil
+		return err
+	}
+	return nil
+}
+
 // SetToken updates the access token
 func (c *Client) SetToken(token string) {
 	c.tokenMu.Lock()

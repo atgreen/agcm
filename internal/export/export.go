@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/green/agcm/internal/api"
@@ -182,23 +183,27 @@ func (e *Exporter) ExportCases(ctx context.Context, caseNumbers []string, progre
 	var exports []*CaseExport
 	var exportsMu sync.Mutex
 
+	// Atomic counter for accurate progress tracking under concurrency
+	var completedCount int64
+
 	// Use semaphore for concurrency control
 	sem := make(chan struct{}, e.opts.Concurrency)
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(caseNumbers))
 
-	for i, caseNum := range caseNumbers {
+	for _, caseNum := range caseNumbers {
 		wg.Add(1)
-		go func(idx int, cn string) {
+		go func(cn string) {
 			defer wg.Done()
 
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
+			currentCompleted := atomic.LoadInt64(&completedCount)
 			if progressCh != nil {
 				progressCh <- Progress{
 					TotalCases:     len(caseNumbers),
-					CompletedCases: idx,
+					CompletedCases: int(currentCompleted),
 					CurrentCase:    cn,
 					CurrentStep:    "Fetching case data",
 				}
@@ -214,9 +219,12 @@ func (e *Exporter) ExportCases(ctx context.Context, caseNumbers []string, progre
 			exports = append(exports, export)
 			exportsMu.Unlock()
 
+			// Determine output path and write individual files if not combined
+			var outputPath string
+			var attDir string
+
 			if !e.opts.Combined {
 				// Write individual file
-				var outputPath string
 				if e.opts.OutputDir != "" {
 					caseDir := filepath.Join(e.opts.OutputDir, cn)
 					if err := os.MkdirAll(caseDir, 0755); err != nil {
@@ -224,8 +232,10 @@ func (e *Exporter) ExportCases(ctx context.Context, caseNumbers []string, progre
 						return
 					}
 					outputPath = filepath.Join(caseDir, "case.md")
+					attDir = filepath.Join(caseDir, e.opts.AttachmentsDir)
 				} else {
 					outputPath = fmt.Sprintf("case-%s.md", cn)
+					attDir = filepath.Join(".", e.opts.AttachmentsDir, cn)
 				}
 
 				md, err := e.formatter.FormatCase(export)
@@ -238,45 +248,54 @@ func (e *Exporter) ExportCases(ctx context.Context, caseNumbers []string, progre
 					errCh <- fmt.Errorf("failed to write case %s: %w", cn, err)
 					return
 				}
+			} else {
+				// Combined mode: attachments go to a shared directory per case
+				attDir = filepath.Join(e.opts.OutputDir, e.opts.AttachmentsDir, cn)
+			}
 
-				// Download attachments if requested
-				if e.opts.IncludeAttachments && len(export.Attachments) > 0 {
-					attDir := filepath.Join(filepath.Dir(outputPath), e.opts.AttachmentsDir)
-					if err := os.MkdirAll(attDir, 0755); err != nil {
-						errCh <- fmt.Errorf("failed to create attachments directory: %w", err)
-						return
-					}
-
-					for _, att := range export.Attachments {
-						if progressCh != nil {
-							progressCh <- Progress{
-								TotalCases:     len(caseNumbers),
-								CompletedCases: idx,
-								CurrentCase:    cn,
-								CurrentStep:    fmt.Sprintf("Downloading %s", att.Filename),
-							}
-						}
-
-						if err := e.downloadAttachment(ctx, cn, att, attDir); err != nil {
-							// Log but don't fail the whole export
-							fmt.Fprintf(os.Stderr, "Warning: failed to download attachment %s: %v\n", att.Filename, err)
-						}
-					}
+			// Download attachments if requested (works for both combined and individual)
+			if e.opts.IncludeAttachments && len(export.Attachments) > 0 {
+				if err := os.MkdirAll(attDir, 0755); err != nil {
+					errCh <- fmt.Errorf("failed to create attachments directory: %w", err)
+					return
 				}
 
-				// Add to manifest
+				for _, att := range export.Attachments {
+					currentCompleted = atomic.LoadInt64(&completedCount)
+					if progressCh != nil {
+						progressCh <- Progress{
+							TotalCases:     len(caseNumbers),
+							CompletedCases: int(currentCompleted),
+							CurrentCase:    cn,
+							CurrentStep:    fmt.Sprintf("Downloading %s", att.Filename),
+						}
+					}
+
+					if err := e.downloadAttachment(ctx, cn, att, attDir); err != nil {
+						// Log but don't fail the whole export
+						_, _ = fmt.Fprintf(os.Stderr, "Warning: failed to download attachment %s: %v\n", att.Filename, err)
+					}
+				}
+			}
+
+			// Add to manifest (for both combined and individual modes)
+			if e.opts.Combined {
+				// For combined mode, reference the combined file
+				manifest.AddCase(cn, export.Case.Summary, "all-cases.md", len(export.Attachments))
+			} else {
 				manifest.AddCase(cn, export.Case.Summary, filepath.Base(filepath.Dir(outputPath))+"/case.md", len(export.Attachments))
 			}
 
+			newCompleted := atomic.AddInt64(&completedCount, 1)
 			if progressCh != nil {
 				progressCh <- Progress{
 					TotalCases:     len(caseNumbers),
-					CompletedCases: idx + 1,
+					CompletedCases: int(newCompleted),
 					CurrentCase:    cn,
 					CurrentStep:    "Complete",
 				}
 			}
-		}(i, caseNum)
+		}(caseNum)
 	}
 
 	wg.Wait()
