@@ -8,7 +8,7 @@ A terminal user interface (TUI) for the Red Hat Customer Portal API.
 
 - **Case Management** - Browse and view Red Hat support cases with a keyboard-driven interface
 - **Case Details** - View case descriptions, comments, and attachments in tabbed panels
-- **Filtering** - Filter cases by status, severity, product, keyword, and account(s)
+- **Filtering** - Filter cases by status, severity, product(s), keyword, and account(s)
 - **Filter Presets** - Save and recall up to 10 filter combinations with hotkeys
 - **Sorting** - Sort cases by last modified date, created date, severity, or case number
 - **Quick Search** - Jump directly to a case by number with `/`
@@ -69,6 +69,7 @@ presets:                # Filter presets (keys 1-9, 0)
     accounts: ["123456", "789012"]
     status: ["Open", "Waiting on Red Hat"]
     severity: ["1 (Urgent)", "2 (High)"]
+    products: ["Red Hat Enterprise Linux"]
   "2":
     name: "All Open"
     status: ["Open"]
@@ -161,7 +162,7 @@ agcm update --check     # Check for updates without installing
 
 ### Mouse
 
-- **Left-click** - Select case, switch tabs, click links
+- **Left-click** - Select case, switch tabs, click links, interact with filter dialog
 - **Right-click** - Open case in browser
 - **Scroll** - Navigate lists and detail content
 - **Drag scrollbar** - Quick scroll
