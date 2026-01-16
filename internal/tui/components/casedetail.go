@@ -307,8 +307,9 @@ func (c *CaseDetail) renderComments() string {
 		sb.WriteString("\n")
 		lineCount++
 
-		// Comment number (bold, on left margin)
-		numStr := c.styles.Title.Render(fmt.Sprintf("#%-3d", i+1))
+		// Comment number (bold, on left margin) - oldest comment is #1
+		commentNum := len(c.comments) - i
+		numStr := c.styles.Title.Render(fmt.Sprintf("#%-3d", commentNum))
 		authorName := comment.Author
 		if c.maskMode {
 			authorName = maskText(authorName)
