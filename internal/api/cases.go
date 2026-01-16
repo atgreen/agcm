@@ -111,15 +111,14 @@ func (c *Client) ListCases(ctx context.Context, filter *CaseFilter) (*ListRespon
 			}
 		}
 
-		// Severity filter - extract just the number for Hydra
+		// Severity filter - use full severity strings like status filter
 		if len(filter.Severity) > 0 {
 			if len(filter.Severity) == 1 {
-				sev := extractSeverityNumber(filter.Severity[0])
-				fqParts = append(fqParts, fmt.Sprintf("case_severity:%q", sev))
+				fqParts = append(fqParts, fmt.Sprintf("case_severity:%q", filter.Severity[0]))
 			} else {
 				quoted := make([]string, len(filter.Severity))
 				for i, s := range filter.Severity {
-					quoted[i] = fmt.Sprintf("%q", extractSeverityNumber(s))
+					quoted[i] = fmt.Sprintf("%q", s)
 				}
 				fqParts = append(fqParts, fmt.Sprintf("case_severity:(%s)", strings.Join(quoted, " OR ")))
 			}
@@ -237,14 +236,6 @@ func (c *Client) ListCases(ctx context.Context, filter *CaseFilter) (*ListRespon
 		StartIndex: resp.Response.Start,
 		Count:      len(cases),
 	}, nil
-}
-
-// extractSeverityNumber extracts just the number from severity strings like "1 (Urgent)"
-func extractSeverityNumber(sev string) string {
-	if len(sev) > 0 && sev[0] >= '1' && sev[0] <= '4' {
-		return string(sev[0])
-	}
-	return sev
 }
 
 // GetCase retrieves a single case by case number

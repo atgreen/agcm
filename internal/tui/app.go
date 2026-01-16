@@ -819,6 +819,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "F" && m.activeFilter != nil {
 			m.activeFilter = nil
 			m.filterBar.Clear()
+			m.updateLayout()
 			m.loadingCases = true
 			m.detailCache = make(map[string]*CachedCaseDetail)
 			m.totalCases = 0
@@ -892,6 +893,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Global left/right for tab switching in detail pane
 		if key.Matches(msg, m.keys.Left) || key.Matches(msg, m.keys.Right) {
+			// Switch focus to detail pane when using left/right
+			m.currentPane = PaneDetail
+			m.updateFocus()
 			caseDetail, cmd := m.caseDetail.Update(msg)
 			m.caseDetail = caseDetail
 			cmds = append(cmds, cmd)
@@ -980,8 +984,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.filterBar.Clear()
 			}
-			// Trigger initial highlight check
-			cmds = append(cmds, m.checkHighlightChange())
+			// Recalculate layout when filter bar visibility changes
+			m.updateLayout()
+			// Clear detail panel if no cases loaded, otherwise trigger highlight check
+			if len(m.cases) == 0 {
+				m.highlightedCase = ""
+				m.caseDetail.SetCase(nil)
+				m.caseDetail.SetComments(nil)
+				m.caseDetail.SetAttachments(nil)
+			} else {
+				cmds = append(cmds, m.checkHighlightChange())
+			}
 		}
 
 	case caseDetailLoadedMsg:
