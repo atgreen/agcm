@@ -34,14 +34,19 @@ Examples:
 }
 
 var exportCasesCmd = &cobra.Command{
-	Use:   "cases",
+	Use:   "cases [preset]",
 	Short: "Export cases with filters",
 	Long: `Export multiple cases matching the specified filters.
 
+You can use a saved filter preset (0-9) created in the TUI, and/or CLI flags.
+If only a preset number is provided with no matching preset saved, nothing is exported.
+
 Examples:
-  agcm export cases --status open
-  agcm export cases --status open,waiting --severity 1,2
-  agcm export cases --product "Red Hat Enterprise Linux" --since 2024-01-01`,
+  agcm export cases 1                              # Export using preset 1
+  agcm export cases --status open                  # Export open cases
+  agcm export cases 1 --severity 1,2               # Preset 1 + severity filter
+  agcm export cases --product "RHEL" --since 2024-01-01`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: runExportCases,
 }
 
@@ -90,10 +95,10 @@ func init() {
 	// Filter flags for cases command
 	exportCasesCmd.Flags().StringVar(&exportStatus, "status", "", "filter by status: open, closed, or exact values (comma-separated)")
 	exportCasesCmd.Flags().StringVar(&exportSeverity, "severity", "", "filter by severity (comma-separated)")
-	exportCasesCmd.Flags().StringVar(&exportProduct, "product", "", "filter by product")
+	exportCasesCmd.Flags().StringVar(&exportProduct, "product", "", "filter by product (comma-separated)")
 	exportCasesCmd.Flags().StringVar(&exportSince, "since", "", "filter by start date (YYYY-MM-DD)")
 	exportCasesCmd.Flags().StringVar(&exportUntil, "until", "", "filter by end date (YYYY-MM-DD)")
-	exportCasesCmd.Flags().StringVarP(&exportAccount, "account", "a", "", "filter by account number")
+	exportCasesCmd.Flags().StringVarP(&exportAccount, "account", "a", "", "filter by account number (comma-separated)")
 	exportCasesCmd.Flags().StringVarP(&exportGroup, "group", "g", "", "filter by case group number")
 }
 
@@ -162,9 +167,49 @@ func runExportCase(cmd *cobra.Command, args []string) error {
 func runExportCases(cmd *cobra.Command, args []string) error {
 	client := GetAPIClient()
 
-	// Build filter
+	// Build filter - start with preset if provided
 	filter := &api.CaseFilter{}
+	hasCliFilters := exportStatus != "" || exportSeverity != "" || exportProduct != "" ||
+		exportSince != "" || exportUntil != "" || exportAccount != "" || exportGroup != ""
 
+	// Check for preset argument (0-9)
+	if len(args) == 1 {
+		presetSlot := args[0]
+		if len(presetSlot) == 1 && presetSlot[0] >= '0' && presetSlot[0] <= '9' {
+			preset := configMgr.GetPreset(presetSlot)
+			if preset == nil {
+				if !hasCliFilters {
+					fmt.Printf("No preset saved in slot %s. Nothing to export.\n", presetSlot)
+					return nil
+				}
+				// Has CLI filters, continue without preset
+			} else {
+				// Load preset filters as defaults
+				fmt.Printf("Using preset %s: %s\n", presetSlot, preset.Name)
+				if len(preset.Status) > 0 {
+					filter.Status = preset.Status
+				}
+				if len(preset.Severity) > 0 {
+					filter.Severity = preset.Severity
+				}
+				if len(preset.Products) > 0 {
+					filter.Products = preset.Products
+				}
+				if len(preset.Accounts) > 0 {
+					filter.Accounts = preset.Accounts
+				}
+			}
+		} else {
+			return fmt.Errorf("invalid preset: %s (must be 0-9)", presetSlot)
+		}
+	} else if !hasCliFilters {
+		// No preset and no CLI filters
+		fmt.Println("No filters specified. Use a preset (0-9) or filter flags.")
+		fmt.Println("Run 'agcm export cases --help' for usage.")
+		return nil
+	}
+
+	// CLI flags override preset values
 	if exportStatus != "" {
 		// Handle status aliases
 		statusInput := strings.ToLower(strings.TrimSpace(exportStatus))

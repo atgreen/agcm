@@ -22,11 +22,12 @@ var listCmd = &cobra.Command{
 }
 
 var listCasesCmd = &cobra.Command{
-	Use:   "cases",
+	Use:   "cases [preset]",
 	Short: "List support cases",
 	Long: `List support cases with optional filtering.
 
-By default, closed cases are excluded. Use --status to filter by specific statuses.
+You can use a saved filter preset (0-9) created in the TUI, and/or CLI flags.
+If only a preset number is provided with no matching preset saved, nothing is listed.
 
 Status values (case-insensitive):
   Open, Closed, "Waiting on Red Hat", "Waiting on Customer"
@@ -35,13 +36,13 @@ Severity values (can use just the number):
   1, 2, 3, 4  or  "1 (Urgent)", "2 (High)", "3 (Normal)", "4 (Low)"
 
 Examples:
-  agcm list cases                           # List open cases
+  agcm list cases 1                         # List using preset 1
   agcm list cases --status Open
   agcm list cases --status "Waiting on Red Hat"
   agcm list cases --status Closed           # List closed cases
-  agcm list cases --severity 1,2 --limit 10
-  agcm list cases --account 12345678
-  agcm list cases --debug                   # Show API debug info`,
+  agcm list cases 1 --severity 1,2          # Preset 1 + severity filter
+  agcm list cases --account 12345678`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: runListCases,
 }
 
@@ -75,6 +76,42 @@ func runListCases(cmd *cobra.Command, args []string) error {
 		Count: listLimit,
 	}
 
+	hasCliFilters := listStatus != "" || listSeverity != "" || listProduct != "" ||
+		listAccount != "" || listGroup != "" || listOwner != ""
+
+	// Check for preset argument (0-9)
+	if len(args) == 1 {
+		presetSlot := args[0]
+		if len(presetSlot) == 1 && presetSlot[0] >= '0' && presetSlot[0] <= '9' {
+			preset := configMgr.GetPreset(presetSlot)
+			if preset == nil {
+				if !hasCliFilters {
+					fmt.Printf("No preset saved in slot %s. Nothing to list.\n", presetSlot)
+					return nil
+				}
+				// Has CLI filters, continue without preset
+			} else {
+				// Load preset filters as defaults
+				fmt.Printf("Using preset %s: %s\n", presetSlot, preset.Name)
+				if len(preset.Status) > 0 {
+					filter.Status = preset.Status
+				}
+				if len(preset.Severity) > 0 {
+					filter.Severity = preset.Severity
+				}
+				if len(preset.Products) > 0 {
+					filter.Products = preset.Products
+				}
+				if len(preset.Accounts) > 0 {
+					filter.Accounts = preset.Accounts
+				}
+			}
+		} else {
+			return fmt.Errorf("invalid preset: %s (must be 0-9)", presetSlot)
+		}
+	}
+
+	// CLI flags override preset values
 	if listStatus != "" {
 		filter.Status = strings.Split(listStatus, ",")
 		// If user explicitly filters for Closed, set IncludeClosed

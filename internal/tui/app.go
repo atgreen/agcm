@@ -792,8 +792,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
+		// Any key dismisses help screen
+		if m.showHelp {
+			m.showHelp = false
+			return m, nil
+		}
+
 		if key.Matches(msg, m.keys.Help) {
-			m.showHelp = !m.showHelp
+			m.showHelp = true
 			return m, nil
 		}
 
@@ -1912,7 +1918,7 @@ func (m *Model) renderHelp() string {
 			m.styles.HelpDesc.Render(h.desc))
 	}
 
-	sb += "\n" + m.styles.Muted.Render("Press ? to close")
+	sb += "\n" + m.styles.Muted.Render("Press any key to close")
 
 	return m.styles.Border.
 		Width(m.width-4).
