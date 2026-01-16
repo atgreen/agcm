@@ -129,9 +129,17 @@ func (c *Client) ListCases(ctx context.Context, filter *CaseFilter) (*ListRespon
 			fqParts = append(fqParts, fmt.Sprintf("case_product:%q", filter.Product))
 		}
 
-		// Account filter
-		if filter.AccountNumber != "" {
-			fqParts = append(fqParts, fmt.Sprintf("case_accountNumber:%q", filter.AccountNumber))
+		// Account filter (supports multiple accounts)
+		if len(filter.Accounts) > 0 {
+			if len(filter.Accounts) == 1 {
+				fqParts = append(fqParts, fmt.Sprintf("case_accountNumber:%q", filter.Accounts[0]))
+			} else {
+				quoted := make([]string, len(filter.Accounts))
+				for i, a := range filter.Accounts {
+					quoted[i] = fmt.Sprintf("%q", a)
+				}
+				fqParts = append(fqParts, fmt.Sprintf("case_accountNumber:(%s)", strings.Join(quoted, " OR ")))
+			}
 		}
 
 		// Group filter

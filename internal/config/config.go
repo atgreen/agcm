@@ -17,11 +17,22 @@ const (
 	filePerms      = 0644
 )
 
+// FilterPreset represents a saved filter configuration
+type FilterPreset struct {
+	Name     string   `yaml:"name"`
+	Accounts []string `yaml:"accounts,omitempty"`
+	Status   []string `yaml:"status,omitempty"`
+	Severity []string `yaml:"severity,omitempty"`
+	Product  string   `yaml:"product,omitempty"`
+	Keyword  string   `yaml:"keyword,omitempty"`
+}
+
 // Config represents the application configuration
 type Config struct {
-	API      APIConfig      `yaml:"api"`
-	UI       UIConfig       `yaml:"ui"`
-	Defaults DefaultsConfig `yaml:"defaults"`
+	API      APIConfig              `yaml:"api"`
+	UI       UIConfig               `yaml:"ui"`
+	Defaults DefaultsConfig         `yaml:"defaults"`
+	Presets  map[string]*FilterPreset `yaml:"presets,omitempty"`
 }
 
 // APIConfig contains API-related settings
@@ -150,4 +161,25 @@ func (m *Manager) GetTheme() string {
 // GetPageSize returns the UI page size
 func (m *Manager) GetPageSize() int {
 	return m.config.UI.PageSize
+}
+
+// GetPreset returns a filter preset by slot key (1-9, 0)
+func (m *Manager) GetPreset(slot string) *FilterPreset {
+	if m.config.Presets == nil {
+		return nil
+	}
+	return m.config.Presets[slot]
+}
+
+// SetPreset saves a filter preset to a slot
+func (m *Manager) SetPreset(slot string, preset *FilterPreset) {
+	if m.config.Presets == nil {
+		m.config.Presets = make(map[string]*FilterPreset)
+	}
+	m.config.Presets[slot] = preset
+}
+
+// GetPresets returns all presets
+func (m *Manager) GetPresets() map[string]*FilterPreset {
+	return m.config.Presets
 }

@@ -26,7 +26,8 @@ type FilterCancelMsg struct{}
 
 // Field indices for navigation
 const (
-	fieldStatusOpen = iota
+	fieldAccounts = iota
+	fieldStatusOpen
 	fieldStatusWaitingRH
 	fieldStatusWaitingCust
 	fieldStatusClosed
@@ -49,6 +50,7 @@ type FilterDialog struct {
 	height int
 
 	// Form fields
+	accountsInput   textinput.Model
 	productInput    textinput.Model
 	keywordInput    textinput.Model
 	products        []string
@@ -74,6 +76,12 @@ type FilterDialog struct {
 
 // NewFilterDialog creates a new filter dialog
 func NewFilterDialog(s *styles.Styles) *FilterDialog {
+	accountsInput := textinput.New()
+	accountsInput.Placeholder = "account number(s), comma-separated"
+	accountsInput.CharLimit = 100
+	accountsInput.Width = 30
+	accountsInput.Prompt = ""
+
 	productInput := textinput.New()
 	productInput.Placeholder = "enter product name"
 	productInput.CharLimit = 50
@@ -88,6 +96,7 @@ func NewFilterDialog(s *styles.Styles) *FilterDialog {
 
 	return &FilterDialog{
 		styles:            s,
+		accountsInput:     accountsInput,
 		productInput:      productInput,
 		keywordInput:      keywordInput,
 		statusOpen:        true, // Default to showing open cases
@@ -104,16 +113,22 @@ func NewFilterDialog(s *styles.Styles) *FilterDialog {
 // Show displays the filter dialog
 func (f *FilterDialog) Show() tea.Cmd {
 	f.visible = true
-	f.focusedField = fieldStatusOpen
+	f.focusedField = fieldAccounts
+	f.accountsInput.Focus()
 	return nil
 }
 
 // ShowWithFilter displays the dialog with existing filter values
 func (f *FilterDialog) ShowWithFilter(filter *api.CaseFilter) tea.Cmd {
 	f.visible = true
-	f.focusedField = fieldStatusOpen
+	f.focusedField = fieldAccounts
+	f.accountsInput.Focus()
 
 	if filter != nil {
+		// Accounts
+		if len(filter.Accounts) > 0 {
+			f.accountsInput.SetValue(strings.Join(filter.Accounts, ", "))
+		}
 		f.productInput.SetValue(filter.Product)
 		f.keywordInput.SetValue(filter.Keyword)
 
@@ -184,6 +199,7 @@ func (f *FilterDialog) SetProductsError(msg string) {
 // Hide hides the dialog
 func (f *FilterDialog) Hide() {
 	f.visible = false
+	f.accountsInput.Blur()
 	f.productInput.Blur()
 	f.keywordInput.Blur()
 }
@@ -203,6 +219,22 @@ func (f *FilterDialog) SetSize(width, height int) {
 func (f *FilterDialog) buildFilter() *api.CaseFilter {
 	filter := &api.CaseFilter{
 		Count: 100,
+	}
+
+	// Accounts
+	if accts := strings.TrimSpace(f.accountsInput.Value()); accts != "" {
+		accounts := strings.Split(accts, ",")
+		for i := range accounts {
+			accounts[i] = strings.TrimSpace(accounts[i])
+		}
+		// Filter out empty strings
+		var validAccounts []string
+		for _, a := range accounts {
+			if a != "" {
+				validAccounts = append(validAccounts, a)
+			}
+		}
+		filter.Accounts = validAccounts
 	}
 
 	// Product
@@ -259,6 +291,7 @@ func (f *FilterDialog) buildFilter() *api.CaseFilter {
 
 // clearFilters resets all fields to defaults
 func (f *FilterDialog) clearFilters() {
+	f.accountsInput.SetValue("")
 	f.productInput.SetValue("")
 	f.keywordInput.SetValue("")
 	f.statusOpen = true
@@ -273,10 +306,13 @@ func (f *FilterDialog) clearFilters() {
 }
 
 func (f *FilterDialog) focusField(field int) {
+	f.accountsInput.Blur()
 	f.productInput.Blur()
 	f.keywordInput.Blur()
 
 	switch field {
+	case fieldAccounts:
+		f.accountsInput.Focus()
 	case fieldProduct:
 		f.productInput.Focus()
 		f.updateProductMatches()
@@ -416,6 +452,8 @@ func (f *FilterDialog) Update(msg tea.Msg) (*FilterDialog, tea.Cmd) {
 		// Update focused text input
 		var cmd tea.Cmd
 		switch f.focusedField {
+		case fieldAccounts:
+			f.accountsInput, cmd = f.accountsInput.Update(msg)
 		case fieldProduct:
 			f.productInput, cmd = f.productInput.Update(msg)
 			f.updateProductMatches()
@@ -539,6 +577,14 @@ func (f *FilterDialog) View() string {
 	content.WriteString(titleStyle.Render("Filter Cases"))
 	content.WriteString("\n\n")
 
+	// Accounts field
+	prefix := "  "
+	if f.focusedField == fieldAccounts {
+		prefix = "> "
+	}
+	content.WriteString(fmt.Sprintf("%sAccounts: %s", prefix, f.accountsInput.View()))
+	content.WriteString("\n\n")
+
 	// Status checkboxes
 	content.WriteString("  Status:\n")
 	content.WriteString(f.renderCheckbox("Open", f.statusOpen, f.focusedField == fieldStatusOpen))
@@ -563,7 +609,7 @@ func (f *FilterDialog) View() string {
 	content.WriteString("\n\n")
 
 	// Product field
-	prefix := "  "
+	prefix = "  "
 	if f.focusedField == fieldProduct {
 		prefix = "> "
 	}

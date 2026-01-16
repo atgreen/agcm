@@ -18,6 +18,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/green/agcm/internal/api"
+	"github.com/green/agcm/internal/config"
 	"github.com/green/agcm/internal/export"
 	"github.com/green/agcm/internal/tui/components"
 	"github.com/green/agcm/internal/tui/styles"
@@ -71,10 +72,10 @@ func (s SortField) String() string {
 
 // Options configures the TUI
 type Options struct {
-	AccountNumber string
-	GroupNumber   string
-	MaskMode      bool
-	Version       string
+	Accounts    []string
+	GroupNumber string
+	MaskMode    bool
+	Version     string
 }
 
 // CachedCaseDetail holds cached case details
@@ -86,13 +87,14 @@ type CachedCaseDetail struct {
 
 // Model is the main TUI model
 type Model struct {
-	client *api.Client
-	opts   Options
-	styles *styles.Styles
-	keys   *styles.KeyMap
-	width  int
-	height int
-	ready  bool
+	client    *api.Client
+	configMgr *config.Manager
+	opts      Options
+	styles    *styles.Styles
+	keys      *styles.KeyMap
+	width     int
+	height    int
+	ready     bool
 
 	// Components
 	caseList   *components.CaseList
@@ -139,6 +141,10 @@ type Model struct {
 	activeFilter *api.CaseFilter
 	totalCases   int // Total cases before filtering (for display)
 	products     []string
+
+	// Presets
+	presetSaveMode bool   // True when waiting for digit to save preset
+	activePreset   string // Currently active preset slot (empty if none)
 
 	// Text search within case
 	textSearch     *components.TextSearch
@@ -202,7 +208,7 @@ const debounceDelay = 500 * time.Millisecond
 const casePageSize = 100
 
 // NewModel creates a new TUI model
-func NewModel(client *api.Client, opts Options) *Model {
+func NewModel(client *api.Client, opts Options, configMgr *config.Manager) *Model {
 	s := styles.DefaultStyles()
 	keys := styles.DefaultKeyMap()
 
@@ -217,6 +223,7 @@ func NewModel(client *api.Client, opts Options) *Model {
 
 	return &Model{
 		client:       client,
+		configMgr:    configMgr,
 		opts:         opts,
 		styles:       s,
 		keys:         keys,
@@ -289,13 +296,17 @@ func (m *Model) loadCasesPage(start int, append bool) tea.Cmd {
 
 func (m *Model) withDefaults(filter *api.CaseFilter, start, count int) *api.CaseFilter {
 	req := &api.CaseFilter{
-		Count:         count,
-		StartIndex:    start,
-		AccountNumber: m.opts.AccountNumber,
-		GroupNumber:   m.opts.GroupNumber,
+		Count:       count,
+		StartIndex:  start,
+		Accounts:    m.opts.Accounts,
+		GroupNumber: m.opts.GroupNumber,
 	}
 	if filter == nil {
 		return req
+	}
+	// If filter has accounts, use those instead of defaults
+	if len(filter.Accounts) > 0 {
+		req.Accounts = filter.Accounts
 	}
 	req.Status = append(req.Status, filter.Status...)
 	req.Severity = append(req.Severity, filter.Severity...)
@@ -816,9 +827,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Clear filter (F)
-		if msg.String() == "F" && m.activeFilter != nil {
+		if msg.String() == "F" && (m.activeFilter != nil || m.activePreset != "") {
 			m.activeFilter = nil
+			m.activePreset = ""
 			m.filterBar.Clear()
+			m.filterBar.ClearPreset()
 			m.updateLayout()
 			m.loadingCases = true
 			m.detailCache = make(map[string]*CachedCaseDetail)
@@ -826,6 +839,68 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.caseList.SetTotalCount(0)
 			m.statusBar.SetMessage(m.styles.Muted.Render("Filter cleared"), 2*time.Second)
 			return m, tea.Batch(m.loadCasesPage(0, false), m.spinner.Tick)
+		}
+
+		// Preset save mode (Ctrl+s)
+		if msg.String() == "ctrl+s" {
+			m.presetSaveMode = true
+			m.statusBar.SetMessage(m.styles.Label.Render("Press 1-9 or 0 to save current filter to preset slot..."), 5*time.Second)
+			return m, nil
+		}
+
+		// Cancel preset save mode with Escape
+		if m.presetSaveMode && msg.String() == "esc" {
+			m.presetSaveMode = false
+			m.statusBar.SetMessage(m.styles.Muted.Render("Preset save cancelled"), 2*time.Second)
+			return m, nil
+		}
+
+		// Handle digit keys for presets (1-9, 0)
+		if len(msg.String()) == 1 && ((msg.String() >= "1" && msg.String() <= "9") || msg.String() == "0") {
+			slot := msg.String()
+			if m.presetSaveMode {
+				// Save current filter to preset
+				m.presetSaveMode = false
+				if m.activeFilter != nil || len(m.opts.Accounts) > 0 {
+					preset := m.buildPresetFromCurrent()
+					m.configMgr.SetPreset(slot, preset)
+					if err := m.configMgr.Save(); err != nil {
+						m.statusBar.SetMessage(m.styles.Error.Render(fmt.Sprintf("Failed to save preset: %v", err)), 3*time.Second)
+					} else {
+						name := preset.Name
+						if name == "" {
+							name = "Preset " + slot
+						}
+						m.activePreset = slot
+						m.filterBar.SetPreset(slot, preset.Name)
+						m.statusBar.SetMessage(m.styles.Success.Render(fmt.Sprintf("Saved to preset %s: %s", slot, name)), 2*time.Second)
+					}
+				} else {
+					m.statusBar.SetMessage(m.styles.Warning.Render("No filter active to save"), 2*time.Second)
+				}
+				return m, nil
+			} else {
+				// Load preset
+				preset := m.configMgr.GetPreset(slot)
+				if preset != nil {
+					m.activeFilter = m.presetToFilter(preset)
+					m.activePreset = slot
+					m.filterBar.SetFilter(m.activeFilter, 0, 0)
+					m.filterBar.SetPreset(slot, preset.Name)
+					m.updateLayout()
+					m.loadingCases = true
+					m.detailCache = make(map[string]*CachedCaseDetail)
+					name := preset.Name
+					if name == "" {
+						name = "Preset " + slot
+					}
+					m.statusBar.SetMessage(m.styles.Success.Render(fmt.Sprintf("Loaded preset %s: %s", slot, name)), 2*time.Second)
+					return m, tea.Batch(m.loadCasesWithFilter(m.activeFilter), m.spinner.Tick)
+				} else {
+					m.statusBar.SetMessage(m.styles.Muted.Render(fmt.Sprintf("No preset in slot %s (Ctrl+s to save)", slot)), 2*time.Second)
+				}
+				return m, nil
+			}
 		}
 
 		// Sort controls
@@ -1353,7 +1428,8 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		}
 		// Right-click on case list row opens in support portal
 		if msg.Y > listHeaderY+1 && msg.Y < m.detailY {
-			rowOffset := msg.Y - headerHeight - 3
+			// Calculate which row was clicked (listTop + border=1, colheader=1, separator=1)
+			rowOffset := msg.Y - listTop - 3
 			if rowOffset >= 0 {
 				clickedIdx := m.caseList.GetOffset() + rowOffset
 				if clickedIdx >= 0 && clickedIdx < len(m.cases) {
@@ -1645,6 +1721,65 @@ func ansiCut(s string, start, end int) string {
 	return result
 }
 
+// buildPresetFromCurrent creates a FilterPreset from the current filter state
+func (m *Model) buildPresetFromCurrent() *config.FilterPreset {
+	preset := &config.FilterPreset{}
+
+	// Get accounts from active filter or defaults
+	if m.activeFilter != nil && len(m.activeFilter.Accounts) > 0 {
+		preset.Accounts = m.activeFilter.Accounts
+	} else if len(m.opts.Accounts) > 0 {
+		preset.Accounts = m.opts.Accounts
+	}
+
+	if m.activeFilter != nil {
+		preset.Status = m.activeFilter.Status
+		preset.Severity = m.activeFilter.Severity
+		preset.Product = m.activeFilter.Product
+		preset.Keyword = m.activeFilter.Keyword
+	}
+
+	// Generate a name based on content
+	var parts []string
+	if len(preset.Accounts) > 0 {
+		if len(preset.Accounts) == 1 {
+			parts = append(parts, "Acct:"+preset.Accounts[0])
+		} else {
+			parts = append(parts, fmt.Sprintf("%d Accts", len(preset.Accounts)))
+		}
+	}
+	if len(preset.Status) > 0 && len(preset.Status) < 4 {
+		parts = append(parts, fmt.Sprintf("%d Status", len(preset.Status)))
+	}
+	if len(preset.Severity) > 0 && len(preset.Severity) < 4 {
+		parts = append(parts, fmt.Sprintf("Sev:%d", len(preset.Severity)))
+	}
+	if preset.Product != "" {
+		p := preset.Product
+		if len(p) > 10 {
+			p = p[:10] + "..."
+		}
+		parts = append(parts, p)
+	}
+	if len(parts) > 0 {
+		preset.Name = strings.Join(parts, ", ")
+	}
+
+	return preset
+}
+
+// presetToFilter converts a FilterPreset to a CaseFilter
+func (m *Model) presetToFilter(preset *config.FilterPreset) *api.CaseFilter {
+	return &api.CaseFilter{
+		Accounts: preset.Accounts,
+		Status:   preset.Status,
+		Severity: preset.Severity,
+		Product:  preset.Product,
+		Keyword:  preset.Keyword,
+		Count:    100,
+	}
+}
+
 // renderDetailWithSpinner overlays a spinner box on the detail pane
 func (m *Model) renderDetailWithSpinner(detail string) string {
 	spinnerText := m.spinner.View() + " Loading case details..."
@@ -1727,9 +1862,9 @@ func (m *Model) renderHelp() string {
 }
 
 // Run starts the TUI
-func Run(client *api.Client, opts Options) error {
+func Run(client *api.Client, opts Options, configMgr *config.Manager) error {
 	p := tea.NewProgram(
-		NewModel(client, opts),
+		NewModel(client, opts, configMgr),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)

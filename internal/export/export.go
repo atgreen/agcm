@@ -348,8 +348,8 @@ func (e *Exporter) downloadAttachment(ctx context.Context, caseNumber string, at
 // ExportWithFilter exports cases matching the given filter
 func (e *Exporter) ExportWithFilter(ctx context.Context, filter *api.CaseFilter, progressCh chan<- Progress) (*Manifest, error) {
 	e.debugf("ExportWithFilter: starting filtered export")
-	e.debugf("ExportWithFilter: filter status=%v severity=%v product=%q account=%q group=%q",
-		filter.Status, filter.Severity, filter.Product, filter.AccountNumber, filter.GroupNumber)
+	e.debugf("ExportWithFilter: filter status=%v severity=%v product=%q accounts=%v group=%q",
+		filter.Status, filter.Severity, filter.Product, filter.Accounts, filter.GroupNumber)
 
 	// Fetch all matching cases
 	var allCases []api.Case

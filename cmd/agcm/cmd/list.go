@@ -92,7 +92,11 @@ func runListCases(cmd *cobra.Command, args []string) error {
 		filter.Product = listProduct
 	}
 	if listAccount != "" {
-		filter.AccountNumber = listAccount
+		accounts := strings.Split(listAccount, ",")
+		for i := range accounts {
+			accounts[i] = strings.TrimSpace(accounts[i])
+		}
+		filter.Accounts = accounts
 	}
 	if listGroup != "" {
 		filter.GroupNumber = listGroup

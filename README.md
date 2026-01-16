@@ -8,7 +8,8 @@ A terminal user interface (TUI) for the Red Hat Customer Portal API.
 
 - **Case Management** - Browse and view Red Hat support cases with a keyboard-driven interface
 - **Case Details** - View case descriptions, comments, and attachments in tabbed panels
-- **Filtering** - Filter cases by status, severity, product, and keyword
+- **Filtering** - Filter cases by status, severity, product, keyword, and account(s)
+- **Filter Presets** - Save and recall up to 10 filter combinations with hotkeys
 - **Sorting** - Sort cases by last modified date, created date, severity, or case number
 - **Quick Search** - Jump directly to a case by number with `/`
 - **Text Search** - Search within case content with `Ctrl+F`
@@ -62,17 +63,28 @@ api:
 defaults:
   account_number: ""    # Default account filter
   group_number: ""      # Default group filter
+presets:                # Filter presets (keys 1-9, 0)
+  "1":
+    name: "Team A Critical"
+    accounts: ["123456", "789012"]
+    status: ["Open", "Waiting on Red Hat"]
+    severity: ["1 (Urgent)", "2 (High)"]
+  "2":
+    name: "All Open"
+    status: ["Open"]
 ```
 
 ## Usage
 
 ```bash
-agcm                    # Launch the TUI
-agcm --account 12345    # Filter by account number
-agcm --group 67890      # Filter by case group
-agcm --mask             # Mask sensitive text for screenshots
-agcm --version          # Show version
-agcm --help             # Show help
+agcm                          # Launch the TUI
+agcm -a 12345                 # Filter by account number
+agcm -a 12345,67890           # Filter by multiple accounts
+agcm -p 1                     # Load filter preset 1
+agcm --group 67890            # Filter by case group
+agcm --mask                   # Mask sensitive text for screenshots
+agcm --version                # Show version
+agcm --help                   # Show help
 ```
 
 ### CLI Commands
@@ -135,6 +147,8 @@ agcm update --check     # Check for updates without installing
 | `/` | Quick search by case number |
 | `f` | Filter dialog |
 | `F` | Clear filter |
+| `1-9`, `0` | Load filter preset |
+| `Ctrl+s` | Save current filter to preset (then press 1-9/0) |
 | `Ctrl+F` | Search within case |
 | `n`, `p` | Next/previous comment (Comments tab) |
 | `s` | Cycle sort field |

@@ -19,6 +19,8 @@ type FilterBar struct {
 	filter      *api.CaseFilter
 	caseCount   int
 	totalCount  int
+	presetSlot  string
+	presetName  string
 }
 
 // NewFilterBar creates a new filter bar
@@ -35,11 +37,25 @@ func (f *FilterBar) SetFilter(filter *api.CaseFilter, caseCount, totalCount int)
 	f.totalCount = totalCount
 }
 
+// SetPreset sets the active preset info
+func (f *FilterBar) SetPreset(slot, name string) {
+	f.presetSlot = slot
+	f.presetName = name
+}
+
+// ClearPreset clears the preset info
+func (f *FilterBar) ClearPreset() {
+	f.presetSlot = ""
+	f.presetName = ""
+}
+
 // Clear removes the filter
 func (f *FilterBar) Clear() {
 	f.filter = nil
 	f.caseCount = 0
 	f.totalCount = 0
+	f.presetSlot = ""
+	f.presetName = ""
 }
 
 // SetWidth sets the bar width
@@ -47,14 +63,17 @@ func (f *FilterBar) SetWidth(width int) {
 	f.width = width
 }
 
-// HasActiveFilter returns true if there's an active filter
+// HasActiveFilter returns true if there's an active filter or preset
 func (f *FilterBar) HasActiveFilter() bool {
+	if f.presetSlot != "" {
+		return true
+	}
 	if f.filter == nil {
 		return false
 	}
 
 	// Check if any filter is actually set
-	return f.filter.AccountNumber != "" ||
+	return len(f.filter.Accounts) > 0 ||
 		f.filter.Product != "" ||
 		f.filter.Keyword != "" ||
 		len(f.filter.Status) > 0 ||
@@ -83,13 +102,31 @@ func (f *FilterBar) View() string {
 
 	var pills []string
 
-	// Account
-	if f.filter.AccountNumber != "" {
-		pills = append(pills, f.renderPill("Account", f.filter.AccountNumber))
+	// Preset indicator
+	if f.presetSlot != "" {
+		presetStyle := lipgloss.NewStyle().
+			Background(lipgloss.Color("33")).
+			Foreground(lipgloss.Color("255")).
+			Bold(true).
+			Padding(0, 1)
+		presetLabel := fmt.Sprintf("[%s]", f.presetSlot)
+		if f.presetName != "" {
+			presetLabel = fmt.Sprintf("[%s] %s", f.presetSlot, f.presetName)
+		}
+		pills = append(pills, presetStyle.Render(presetLabel))
+	}
+
+	// Account(s)
+	if f.filter != nil && len(f.filter.Accounts) > 0 {
+		if len(f.filter.Accounts) == 1 {
+			pills = append(pills, f.renderPill("Account", f.filter.Accounts[0]))
+		} else {
+			pills = append(pills, f.renderPill("Accounts", strings.Join(f.filter.Accounts, ",")))
+		}
 	}
 
 	// Status
-	if len(f.filter.Status) > 0 && len(f.filter.Status) < 4 {
+	if f.filter != nil && len(f.filter.Status) > 0 && len(f.filter.Status) < 4 {
 		// Abbreviate status names
 		var abbrev []string
 		for _, s := range f.filter.Status {
@@ -110,7 +147,7 @@ func (f *FilterBar) View() string {
 	}
 
 	// Severity
-	if len(f.filter.Severity) > 0 && len(f.filter.Severity) < 4 {
+	if f.filter != nil && len(f.filter.Severity) > 0 && len(f.filter.Severity) < 4 {
 		var sevs []string
 		for _, s := range f.filter.Severity {
 			// Extract just the number
@@ -122,7 +159,7 @@ func (f *FilterBar) View() string {
 	}
 
 	// Product
-	if f.filter.Product != "" {
+	if f.filter != nil && f.filter.Product != "" {
 		prod := f.filter.Product
 		if len(prod) > 15 {
 			prod = prod[:15] + "..."
@@ -131,7 +168,7 @@ func (f *FilterBar) View() string {
 	}
 
 	// Keyword
-	if f.filter.Keyword != "" {
+	if f.filter != nil && f.filter.Keyword != "" {
 		kw := f.filter.Keyword
 		if len(kw) > 15 {
 			kw = kw[:15] + "..."

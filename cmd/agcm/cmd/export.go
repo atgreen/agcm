@@ -198,7 +198,11 @@ func runExportCases(cmd *cobra.Command, args []string) error {
 		filter.EndDate = &t
 	}
 	if exportAccount != "" {
-		filter.AccountNumber = exportAccount
+		accounts := strings.Split(exportAccount, ",")
+		for i := range accounts {
+			accounts[i] = strings.TrimSpace(accounts[i])
+		}
+		filter.Accounts = accounts
 	}
 	if exportGroup != "" {
 		filter.GroupNumber = exportGroup

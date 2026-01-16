@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/green/agcm/internal/api"
 	"github.com/green/agcm/internal/auth"
@@ -18,8 +19,9 @@ var (
 	cfgDir        string
 	debugMode     bool
 	maskMode      bool
-	tuiAccount    string
+	tuiAccounts   string
 	tuiGroup      string
+	tuiPreset     string
 	configMgr     *config.Manager
 	tokenMgr      *auth.TokenManager
 	storage       *auth.Storage
@@ -50,22 +52,38 @@ Filter, sort, search, and export cases to markdown.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Build TUI options from flags and config defaults
 		opts := tui.Options{
-			AccountNumber: tuiAccount,
-			GroupNumber:   tuiGroup,
-			MaskMode:      maskMode,
-			Version:       version,
+			GroupNumber: tuiGroup,
+			MaskMode:    maskMode,
+			Version:     version,
 		}
 
-		// Use config defaults if not specified on command line
-		if opts.AccountNumber == "" {
-			opts.AccountNumber = configMgr.Get().Defaults.AccountNumber
+		// Handle preset flag
+		if tuiPreset != "" {
+			preset := configMgr.GetPreset(tuiPreset)
+			if preset != nil {
+				opts.Accounts = preset.Accounts
+			}
+		}
+
+		// Handle accounts flag (comma-separated, overrides preset)
+		if tuiAccounts != "" {
+			accounts := strings.Split(tuiAccounts, ",")
+			for i := range accounts {
+				accounts[i] = strings.TrimSpace(accounts[i])
+			}
+			opts.Accounts = accounts
+		}
+
+		// Use config defaults if not specified
+		if len(opts.Accounts) == 0 && configMgr.Get().Defaults.AccountNumber != "" {
+			opts.Accounts = []string{configMgr.Get().Defaults.AccountNumber}
 		}
 		if opts.GroupNumber == "" {
 			opts.GroupNumber = configMgr.Get().Defaults.GroupNumber
 		}
 
 		// Launch TUI
-		return tui.Run(apiClient, opts)
+		return tui.Run(apiClient, opts, configMgr)
 	},
 }
 
@@ -87,8 +105,9 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "enable debug output")
 
 	// TUI-specific flags (on root command, not persistent)
-	rootCmd.Flags().StringVarP(&tuiAccount, "account", "a", "", "filter by account number")
+	rootCmd.Flags().StringVarP(&tuiAccounts, "account", "a", "", "filter by account number(s), comma-separated")
 	rootCmd.Flags().StringVarP(&tuiGroup, "group", "g", "", "filter by case group number")
+	rootCmd.Flags().StringVarP(&tuiPreset, "preset", "p", "", "load filter preset (1-9, 0)")
 	rootCmd.Flags().BoolVar(&maskMode, "mask", false, "mask sensitive text for screenshots")
 }
 

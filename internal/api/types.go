@@ -130,9 +130,9 @@ type CaseFilter struct {
 	Count         int        `json:"count,omitempty"`
 	StartIndex    int        `json:"startIndex,omitempty"`
 	IncludeClosed bool       `json:"includeClosed,omitempty"`
-	AccountNumber string     `json:"accountNumber,omitempty"` // Filter by specific account
-	GroupNumber   string     `json:"groupNumber,omitempty"`   // Filter by case group
-	OwnerSSOName  string     `json:"ownerSSOName,omitempty"`  // Filter by owner
+	Accounts      []string   `json:"accounts,omitempty"`    // Filter by account number(s)
+	GroupNumber   string     `json:"groupNumber,omitempty"` // Filter by case group
+	OwnerSSOName  string     `json:"ownerSSOName,omitempty"` // Filter by owner
 }
 
 // SearchResult represents a search result item
