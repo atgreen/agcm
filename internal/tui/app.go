@@ -32,7 +32,7 @@ func init() {
 
 func debugLog(format string, args ...interface{}) {
 	if debugFile != nil {
-		fmt.Fprintf(debugFile, time.Now().Format("15:04:05.000")+" "+format+"\n", args...)
+		_, _ = fmt.Fprintf(debugFile, time.Now().Format("15:04:05.000")+" "+format+"\n", args...)
 		_ = debugFile.Sync()
 	}
 }
@@ -598,9 +598,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.pendingExport != "" && m.exportPath != "" {
 				debugLog("Starting export...")
 				var exportCmd tea.Cmd
-				if m.pendingExport == "single" {
+				switch m.pendingExport {
+				case "single":
 					exportCmd = m.startSingleExport(m.exportCaseNumber, m.exportPath)
-				} else if m.pendingExport == "bulk" {
+				case "bulk":
 					exportCmd = m.startBulkExport(m.exportPath)
 				}
 				m.pendingExport = ""
@@ -1321,12 +1322,13 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 				}
 			} else if x >= 11 && x < 24 {
 				// MODIFIED column - toggle between LastModified and Created
-				if m.sortField == SortByLastModified {
+				switch m.sortField {
+				case SortByLastModified:
 					m.sortField = SortByCreated
 					m.sortCases()
-				} else if m.sortField == SortByCreated {
+				case SortByCreated:
 					m.toggleSortOrder()
-				} else {
+				default:
 					m.sortField = SortByLastModified
 					m.sortCases()
 				}

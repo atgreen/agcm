@@ -325,7 +325,7 @@ func (e *Exporter) downloadAttachment(ctx context.Context, caseNumber string, at
 	if err != nil {
 		return err
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	if filename == "" {
 		filename = att.Filename
@@ -336,7 +336,7 @@ func (e *Exporter) downloadAttachment(ctx context.Context, caseNumber string, at
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if _, err := io.Copy(f, reader); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)

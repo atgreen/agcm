@@ -145,8 +145,8 @@ func runListCases(cmd *cobra.Command, args []string) error {
 
 	// Print table
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "CASE\tSEV\tSTATUS\tPRODUCT\tSUMMARY")
-	fmt.Fprintln(tw, "----\t---\t------\t-------\t-------")
+	_, _ = fmt.Fprintln(tw, "CASE\tSEV\tSTATUS\tPRODUCT\tSUMMARY")
+	_, _ = fmt.Fprintln(tw, "----\t---\t------\t-------\t-------")
 
 	for _, c := range result.Items {
 		summary := c.Summary
@@ -170,7 +170,7 @@ func runListCases(cmd *cobra.Command, args []string) error {
 			status = status[:17] + "..."
 		}
 
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
 			c.CaseNumber,
 			sev,
 			status,
@@ -178,7 +178,7 @@ func runListCases(cmd *cobra.Command, args []string) error {
 			summary,
 		)
 	}
-	tw.Flush()
+	_ = tw.Flush()
 
 	fmt.Printf("\nShowing %d of %d cases\n", len(result.Items), result.TotalCount)
 

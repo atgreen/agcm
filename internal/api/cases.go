@@ -282,7 +282,7 @@ func (c *Client) GetCaseComments(ctx context.Context, caseNumber string) ([]Comm
 		var raw []map[string]interface{}
 		if json.Unmarshal(body, &raw) == nil && len(raw) > 0 {
 			if sample, err := json.MarshalIndent(raw[0], "", "  "); err == nil {
-				fmt.Fprintf(c.debugFile, "  Sample comment JSON:\n%s\n", string(sample))
+				_, _ = fmt.Fprintf(c.debugFile, "  Sample comment JSON:\n%s\n", string(sample))
 			}
 		}
 	}

@@ -168,12 +168,13 @@ func runExportCases(cmd *cobra.Command, args []string) error {
 	if exportStatus != "" {
 		// Handle status aliases
 		statusInput := strings.ToLower(strings.TrimSpace(exportStatus))
-		if statusInput == "open" {
+		switch statusInput {
+		case "open":
 			// "open" is an alias for all active (non-closed) statuses
 			filter.Status = []string{"Waiting on Red Hat", "Waiting on Customer"}
-		} else if statusInput == "closed" {
+		case "closed":
 			filter.Status = []string{"Closed"}
-		} else {
+		default:
 			filter.Status = strings.Split(exportStatus, ",")
 		}
 	}

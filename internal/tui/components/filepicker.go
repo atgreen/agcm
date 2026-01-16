@@ -24,7 +24,7 @@ func init() {
 
 func fpDebugLog(format string, args ...interface{}) {
 	if fpDebugFile != nil {
-		fmt.Fprintf(fpDebugFile, time.Now().Format("15:04:05.000")+" "+format+"\n", args...)
+		_, _ = fmt.Fprintf(fpDebugFile, time.Now().Format("15:04:05.000")+" "+format+"\n", args...)
 		_ = fpDebugFile.Sync()
 	}
 }

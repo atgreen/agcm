@@ -48,7 +48,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	caseResults, err := client.SearchCases(ctx, query, searchLimit)
 	if err != nil {
 		// Log error but continue with KCS search
-		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: case search failed: %v\n", err)
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: case search failed: %v\n", err)
 	} else {
 		for _, r := range caseResults {
 			results = append(results, struct {
@@ -63,7 +63,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	kcsResults, err := client.Search(ctx, query, searchLimit)
 	if err != nil {
 		// Log error but continue if we have case results
-		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: KCS search failed: %v\n", err)
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: KCS search failed: %v\n", err)
 	} else {
 		for _, r := range kcsResults {
 			results = append(results, struct {

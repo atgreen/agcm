@@ -270,7 +270,7 @@ func (f *FilterDialog) buildFilter() *api.CaseFilter {
 	}
 
 	// Status - only add if not all selected
-	if !(f.statusOpen && f.statusWaitingRH && f.statusWaitingCust && f.statusClosed) {
+	if !f.statusOpen || !f.statusWaitingRH || !f.statusWaitingCust || !f.statusClosed {
 		var statuses []string
 		if f.statusOpen {
 			statuses = append(statuses, "Open")
@@ -288,7 +288,7 @@ func (f *FilterDialog) buildFilter() *api.CaseFilter {
 	}
 
 	// Severity - only add if not all selected
-	if !(f.sev1 && f.sev2 && f.sev3 && f.sev4) {
+	if !f.sev1 || !f.sev2 || !f.sev3 || !f.sev4 {
 		var severities []string
 		if f.sev1 {
 			severities = append(severities, "1 (Urgent)")
@@ -758,113 +758,6 @@ func (f *FilterDialog) renderProductDropdownBox() string {
 		Width(58)
 
 	return boxStyle.Render(content.String())
-}
-
-// renderProductMatchesCompact renders the dropdown as a compact box for side overlay
-func (f *FilterDialog) renderProductMatchesCompact() string {
-	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-
-	if f.productsLoading {
-		return helpStyle.Render("Loading...")
-	}
-	if f.productsError != "" {
-		return helpStyle.Render("Load failed")
-	}
-	if len(f.products) == 0 {
-		return helpStyle.Render("No products")
-	}
-	if len(f.productMatches) == 0 {
-		return helpStyle.Render("No matches")
-	}
-
-	var lines []string
-	maxItems := 6
-	start := 0
-	if f.productCursor >= maxItems {
-		start = f.productCursor - maxItems + 1
-	}
-	end := start + maxItems
-	if end > len(f.productMatches) {
-		end = len(f.productMatches)
-	}
-
-	listWidth := 28
-	for i := start; i < end; i++ {
-		line := truncateSimpleFD(f.productMatches[i], listWidth)
-		if i == f.productCursor {
-			line = f.styles.Selected.Render("> " + line)
-		} else {
-			line = "  " + line
-		}
-		lines = append(lines, line)
-	}
-
-	// Show count indicator if there are more items
-	if len(f.productMatches) > maxItems {
-		countStr := helpStyle.Render(fmt.Sprintf("(%d/%d)", f.productCursor+1, len(f.productMatches)))
-		lines = append(lines, countStr)
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-func (f *FilterDialog) renderProductMatches() string {
-	var sb strings.Builder
-	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	sb.WriteString("  ")
-	sb.WriteString(helpStyle.Render("Products:"))
-	sb.WriteString("\n")
-
-	if f.productsLoading {
-		sb.WriteString("    ")
-		sb.WriteString(helpStyle.Render("Loading products..."))
-		sb.WriteString("\n")
-		return sb.String()
-	}
-	if f.productsError != "" {
-		sb.WriteString("    ")
-		sb.WriteString(helpStyle.Render("Failed to load products"))
-		sb.WriteString("\n")
-		sb.WriteString("    ")
-		sb.WriteString(helpStyle.Render(truncateSimpleFD(f.productsError, 46)))
-		sb.WriteString("\n")
-		return sb.String()
-	}
-	if len(f.products) == 0 {
-		sb.WriteString("    ")
-		sb.WriteString(helpStyle.Render("No products available"))
-		sb.WriteString("\n")
-		return sb.String()
-	}
-	if len(f.productMatches) == 0 {
-		sb.WriteString("    ")
-		sb.WriteString(helpStyle.Render("No matches"))
-		sb.WriteString("\n")
-		return sb.String()
-	}
-
-	maxItems := 6
-	start := 0
-	if f.productCursor >= maxItems {
-		start = f.productCursor - maxItems + 1
-	}
-	end := start + maxItems
-	if end > len(f.productMatches) {
-		end = len(f.productMatches)
-	}
-
-	listWidth := 46
-	for i := start; i < end; i++ {
-		line := truncateSimpleFD(f.productMatches[i], listWidth)
-		if i == f.productCursor {
-			line = f.styles.Selected.Render("  > " + line)
-		} else {
-			line = "    " + line
-		}
-		sb.WriteString(line)
-		sb.WriteString("\n")
-	}
-	return sb.String()
 }
 
 func truncateSimpleFD(s string, width int) string {

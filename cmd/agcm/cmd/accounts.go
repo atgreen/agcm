@@ -76,13 +76,13 @@ func runListAccounts(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ACCOUNT NUMBER\tACCOUNT NAME")
-	fmt.Fprintln(w, "--------------\t------------")
+	_, _ = fmt.Fprintln(w, "ACCOUNT NUMBER\tACCOUNT NAME")
+	_, _ = fmt.Fprintln(w, "--------------\t------------")
 
 	for num, name := range accounts {
-		fmt.Fprintf(w, "%s\t%s\n", num, name)
+		_, _ = fmt.Fprintf(w, "%s\t%s\n", num, name)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	fmt.Printf("\nFound %d account(s)\n", len(accounts))
 	fmt.Println("\nTo view cases for a specific account:")

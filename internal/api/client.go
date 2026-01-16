@@ -147,9 +147,9 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	}
 
 	if c.debug && c.debugFile != nil {
-		fmt.Fprintf(c.debugFile, "[%s] %s %s\n", time.Now().Format("15:04:05"), method, u)
+		_, _ = fmt.Fprintf(c.debugFile, "[%s] %s %s\n", time.Now().Format("15:04:05"), method, u)
 		if len(bodyBytes) > 0 {
-			fmt.Fprintf(c.debugFile, "  Request: %s\n", string(bodyBytes))
+			_, _ = fmt.Fprintf(c.debugFile, "  Request: %s\n", string(bodyBytes))
 		}
 	}
 
@@ -160,7 +160,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 
 	// Handle token expiration
 	if resp.StatusCode == http.StatusUnauthorized && c.TokenRefresher != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		newToken, err := c.TokenRefresher(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to refresh token: %w", err)
@@ -211,13 +211,13 @@ func (c *Client) getRaw(ctx context.Context, path string, query url.Values) ([]b
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		if c.debug && c.debugFile != nil {
-			fmt.Fprintf(c.debugFile, "  Response: %d %s\n", resp.StatusCode, string(body))
+			_, _ = fmt.Fprintf(c.debugFile, "  Response: %d %s\n", resp.StatusCode, string(body))
 		}
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
@@ -227,7 +227,7 @@ func (c *Client) getRaw(ctx context.Context, path string, query url.Values) ([]b
 		if len(preview) > 500 {
 			preview = preview[:500] + "..."
 		}
-		fmt.Fprintf(c.debugFile, "  Response: %d (%d bytes): %s\n", resp.StatusCode, len(body), preview)
+		_, _ = fmt.Fprintf(c.debugFile, "  Response: %d (%d bytes): %s\n", resp.StatusCode, len(body), preview)
 	}
 
 	return body, nil
@@ -248,7 +248,7 @@ func (c *Client) post(ctx context.Context, path string, requestBody interface{},
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -257,7 +257,7 @@ func (c *Client) post(ctx context.Context, path string, requestBody interface{},
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if c.debug && c.debugFile != nil {
-			fmt.Fprintf(c.debugFile, "  Response: %d %s\n", resp.StatusCode, string(respBody))
+			_, _ = fmt.Fprintf(c.debugFile, "  Response: %d %s\n", resp.StatusCode, string(respBody))
 		}
 		return fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
 	}
@@ -267,7 +267,7 @@ func (c *Client) post(ctx context.Context, path string, requestBody interface{},
 		if len(preview) > 500 {
 			preview = preview[:500] + "..."
 		}
-		fmt.Fprintf(c.debugFile, "  Response: %d (%d bytes): %s\n", resp.StatusCode, len(respBody), preview)
+		_, _ = fmt.Fprintf(c.debugFile, "  Response: %d (%d bytes): %s\n", resp.StatusCode, len(respBody), preview)
 	}
 
 	if result != nil {
@@ -318,9 +318,9 @@ func (c *Client) postHydra(ctx context.Context, path string, body io.Reader, res
 	}
 
 	if c.debug && c.debugFile != nil {
-		fmt.Fprintf(c.debugFile, "[%s] POST %s\n", time.Now().Format("15:04:05"), hydraURL)
+		_, _ = fmt.Fprintf(c.debugFile, "[%s] POST %s\n", time.Now().Format("15:04:05"), hydraURL)
 		if len(bodyBytes) > 0 {
-			fmt.Fprintf(c.debugFile, "  Request: %s\n", string(bodyBytes))
+			_, _ = fmt.Fprintf(c.debugFile, "  Request: %s\n", string(bodyBytes))
 		}
 	}
 
@@ -328,7 +328,7 @@ func (c *Client) postHydra(ctx context.Context, path string, body io.Reader, res
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -340,11 +340,11 @@ func (c *Client) postHydra(ctx context.Context, path string, body io.Reader, res
 		if len(preview) > 500 {
 			preview = preview[:500] + "..."
 		}
-		fmt.Fprintf(c.debugFile, "  Response: %d (%d bytes): %s\n", resp.StatusCode, len(respBody), preview)
+		_, _ = fmt.Fprintf(c.debugFile, "  Response: %d (%d bytes): %s\n", resp.StatusCode, len(respBody), preview)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("Hydra API error %d: %s", resp.StatusCode, string(respBody))
+		return fmt.Errorf("hydra API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	if result != nil {
@@ -364,7 +364,7 @@ func (c *Client) DownloadAttachment(ctx context.Context, caseNumber, uuid string
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, "", fmt.Errorf("failed to download attachment: status %d", resp.StatusCode)
 	}
 
