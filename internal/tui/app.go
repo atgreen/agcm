@@ -1519,6 +1519,11 @@ func (m *Model) View() string {
 			debugLog("component lines: list=%d detail=%d", countLines(list), countLines(detail))
 		}
 
+		// If loading cases (after initial load), overlay spinner on list pane
+		if m.loadingCases && m.initialLoadDone {
+			list = m.renderListWithSpinner(list)
+		}
+
 		// If loading detail, overlay spinner on detail pane
 		if m.loadingDetail {
 			detail = m.renderDetailWithSpinner(detail)
@@ -1778,6 +1783,29 @@ func (m *Model) presetToFilter(preset *config.FilterPreset) *api.CaseFilter {
 		Keyword:  preset.Keyword,
 		Count:    100,
 	}
+}
+
+// renderListWithSpinner overlays a spinner box on the case list pane
+func (m *Model) renderListWithSpinner(list string) string {
+	spinnerText := m.spinner.View() + " Loading cases..."
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.styles.Header.GetBackground()).
+		Padding(1, 3)
+
+	spinnerBox := boxStyle.Render(spinnerText)
+
+	listWidth := lipgloss.Width(list)
+	listHeight := lipgloss.Height(list)
+
+	return lipgloss.Place(
+		listWidth,
+		listHeight,
+		lipgloss.Center,
+		lipgloss.Center,
+		spinnerBox,
+	)
 }
 
 // renderDetailWithSpinner overlays a spinner box on the detail pane
