@@ -89,7 +89,11 @@ func runListCases(cmd *cobra.Command, args []string) error {
 		filter.Severity = strings.Split(listSeverity, ",")
 	}
 	if listProduct != "" {
-		filter.Product = listProduct
+		products := strings.Split(listProduct, ",")
+		for i := range products {
+			products[i] = strings.TrimSpace(products[i])
+		}
+		filter.Products = products
 	}
 	if listAccount != "" {
 		accounts := strings.Split(listAccount, ",")

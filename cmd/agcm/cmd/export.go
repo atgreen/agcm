@@ -181,7 +181,11 @@ func runExportCases(cmd *cobra.Command, args []string) error {
 		filter.Severity = strings.Split(exportSeverity, ",")
 	}
 	if exportProduct != "" {
-		filter.Product = exportProduct
+		products := strings.Split(exportProduct, ",")
+		for i := range products {
+			products[i] = strings.TrimSpace(products[i])
+		}
+		filter.Products = products
 	}
 	if exportSince != "" {
 		t, err := time.Parse("2006-01-02", exportSince)
@@ -246,8 +250,8 @@ func runExportCases(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Manifest: %s/export-manifest.json\n", exportOutputDir)
 
 		// Record filters in manifest
-		if filter.Status != nil || filter.Severity != nil || filter.Product != "" {
-			manifest.SetFilters(filter.Status, filter.Severity, filter.Product, exportSince, exportUntil)
+		if filter.Status != nil || filter.Severity != nil || len(filter.Products) > 0 {
+			manifest.SetFilters(filter.Status, filter.Severity, filter.Products, exportSince, exportUntil)
 		}
 	}
 

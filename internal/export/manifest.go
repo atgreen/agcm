@@ -21,7 +21,7 @@ type Manifest struct {
 type ManifestFilters struct {
 	Status   []string `json:"status,omitempty"`
 	Severity []string `json:"severity,omitempty"`
-	Product  string   `json:"product,omitempty"`
+	Products []string `json:"products,omitempty"`
 	Since    string   `json:"since,omitempty"`
 	Until    string   `json:"until,omitempty"`
 }
@@ -52,11 +52,11 @@ func (m *Manifest) AddCase(caseNumber, summary, file string, attachments int) {
 }
 
 // SetFilters records the filters that were applied
-func (m *Manifest) SetFilters(status, severity []string, product, since, until string) {
+func (m *Manifest) SetFilters(status, severity, products []string, since, until string) {
 	m.FiltersApplied = &ManifestFilters{
 		Status:   status,
 		Severity: severity,
-		Product:  product,
+		Products: products,
 		Since:    since,
 		Until:    until,
 	}

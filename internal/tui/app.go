@@ -310,7 +310,7 @@ func (m *Model) withDefaults(filter *api.CaseFilter, start, count int) *api.Case
 	}
 	req.Status = append(req.Status, filter.Status...)
 	req.Severity = append(req.Severity, filter.Severity...)
-	req.Product = filter.Product
+	req.Products = append(req.Products, filter.Products...)
 	req.Keyword = filter.Keyword
 	req.IncludeClosed = filter.IncludeClosed
 	return req
@@ -1558,6 +1558,12 @@ func (m *Model) View() string {
 	// Filter dialog overlay
 	if m.filterDialog.IsVisible() {
 		view = overlayCenter(view, m.filterDialog.View(), m.width, m.height)
+
+		// Product dropdown overlay (separate so it truly overlays content)
+		if m.filterDialog.ShouldShowProductDropdown() {
+			dropdownX, dropdownY := m.filterDialog.GetDropdownPosition()
+			view = overlayAt(view, m.filterDialog.RenderProductDropdown(), dropdownX, dropdownY, m.width, m.height)
+		}
 	}
 
 	// File picker overlay
@@ -1679,6 +1685,55 @@ func overlayBottom(background, overlay string, width, height int) string {
 	return strings.Join(bgLines[:height], "\n")
 }
 
+// overlayAt places an overlay at a specific x,y position on the screen
+func overlayAt(background, overlay string, x, y, width, height int) string {
+	bgLines := strings.Split(background, "\n")
+	overlayLines := strings.Split(overlay, "\n")
+
+	// Ensure background has enough lines
+	for len(bgLines) < height {
+		bgLines = append(bgLines, "")
+	}
+
+	// Clamp position
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+
+	// Overlay each line
+	for i, overlayLine := range overlayLines {
+		bgY := y + i
+		if bgY >= len(bgLines) || bgY >= height {
+			break
+		}
+
+		bgLine := bgLines[bgY]
+		bgLineWidth := lipgloss.Width(bgLine)
+
+		// Pad background line if needed to reach overlay start position
+		if bgLineWidth < x {
+			bgLine += strings.Repeat(" ", x-bgLineWidth)
+		}
+
+		// Split background line at overlay position
+		var before, after string
+		if x > 0 && bgLineWidth > 0 {
+			before = ansiCut(bgLine, 0, x)
+		}
+		afterStart := x + lipgloss.Width(overlayLine)
+		if bgLineWidth > afterStart {
+			after = ansiCut(bgLine, afterStart, bgLineWidth)
+		}
+
+		bgLines[bgY] = before + overlayLine + after
+	}
+
+	return strings.Join(bgLines[:height], "\n")
+}
+
 func trimTrailingNewlines(s string) string {
 	return strings.TrimRight(s, "\n")
 }
@@ -1740,7 +1795,7 @@ func (m *Model) buildPresetFromCurrent() *config.FilterPreset {
 	if m.activeFilter != nil {
 		preset.Status = m.activeFilter.Status
 		preset.Severity = m.activeFilter.Severity
-		preset.Product = m.activeFilter.Product
+		preset.Products = m.activeFilter.Products
 		preset.Keyword = m.activeFilter.Keyword
 	}
 
@@ -1759,12 +1814,16 @@ func (m *Model) buildPresetFromCurrent() *config.FilterPreset {
 	if len(preset.Severity) > 0 && len(preset.Severity) < 4 {
 		parts = append(parts, fmt.Sprintf("Sev:%d", len(preset.Severity)))
 	}
-	if preset.Product != "" {
-		p := preset.Product
-		if len(p) > 10 {
-			p = p[:10] + "..."
+	if len(preset.Products) > 0 {
+		if len(preset.Products) == 1 {
+			p := preset.Products[0]
+			if len(p) > 10 {
+				p = p[:10] + "..."
+			}
+			parts = append(parts, p)
+		} else {
+			parts = append(parts, fmt.Sprintf("%d Products", len(preset.Products)))
 		}
-		parts = append(parts, p)
 	}
 	if len(parts) > 0 {
 		preset.Name = strings.Join(parts, ", ")
@@ -1779,7 +1838,7 @@ func (m *Model) presetToFilter(preset *config.FilterPreset) *api.CaseFilter {
 		Accounts: preset.Accounts,
 		Status:   preset.Status,
 		Severity: preset.Severity,
-		Product:  preset.Product,
+		Products: preset.Products,
 		Keyword:  preset.Keyword,
 		Count:    100,
 	}
@@ -1859,6 +1918,8 @@ func (m *Model) renderHelp() string {
 		{"/", "Quick search by case number"},
 		{"f", "Filter dialog"},
 		{"F", "Clear filter"},
+		{"1-9, 0", "Load filter preset"},
+		{"ctrl+s + #", "Save filter to preset slot"},
 		{"ctrl+f", "Search within case"},
 		{"n, p", "Next/prev comment (Comments tab)"},
 		{"s", "Cycle sort field"},

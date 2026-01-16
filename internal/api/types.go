@@ -123,7 +123,7 @@ type Entitlement struct {
 type CaseFilter struct {
 	Status        []string   `json:"status,omitempty"`
 	Severity      []string   `json:"severity,omitempty"`
-	Product       string     `json:"product,omitempty"`
+	Products      []string   `json:"products,omitempty"`
 	Keyword       string     `json:"keyword,omitempty"`
 	StartDate     *time.Time `json:"startDate,omitempty"`
 	EndDate       *time.Time `json:"endDate,omitempty"`

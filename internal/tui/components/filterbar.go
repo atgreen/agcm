@@ -74,7 +74,7 @@ func (f *FilterBar) HasActiveFilter() bool {
 
 	// Check if any filter is actually set
 	return len(f.filter.Accounts) > 0 ||
-		f.filter.Product != "" ||
+		len(f.filter.Products) > 0 ||
 		f.filter.Keyword != "" ||
 		len(f.filter.Status) > 0 ||
 		len(f.filter.Severity) > 0
@@ -158,13 +158,18 @@ func (f *FilterBar) View() string {
 			pills = append(pills, f.renderPill("Sev", strings.Join(sevs, ",")))
 		}
 
-		// Product
-		if f.filter != nil && f.filter.Product != "" {
-			prod := f.filter.Product
-			if len(prod) > 15 {
-				prod = prod[:15] + "..."
+		// Product(s)
+		if f.filter != nil && len(f.filter.Products) > 0 {
+			if len(f.filter.Products) == 1 {
+				prod := f.filter.Products[0]
+				if len(prod) > 15 {
+					prod = prod[:15] + "..."
+				}
+				pills = append(pills, f.renderPill("Product", prod))
+			} else {
+				// Show count for multiple products
+				pills = append(pills, f.renderPill("Products", fmt.Sprintf("%d selected", len(f.filter.Products))))
 			}
-			pills = append(pills, f.renderPill("Product", prod))
 		}
 
 		// Keyword

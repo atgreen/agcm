@@ -23,7 +23,7 @@ type FilterPreset struct {
 	Accounts []string `yaml:"accounts,omitempty"`
 	Status   []string `yaml:"status,omitempty"`
 	Severity []string `yaml:"severity,omitempty"`
-	Product  string   `yaml:"product,omitempty"`
+	Products []string `yaml:"products,omitempty"`
 	Keyword  string   `yaml:"keyword,omitempty"`
 }
 
