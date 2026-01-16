@@ -102,7 +102,7 @@ func (f *FilterBar) View() string {
 
 	var pills []string
 
-	// Preset indicator
+	// Preset indicator - when preset is active, only show preset (not individual filters)
 	if f.presetSlot != "" {
 		presetStyle := lipgloss.NewStyle().
 			Background(lipgloss.Color("33")).
@@ -114,66 +114,67 @@ func (f *FilterBar) View() string {
 			presetLabel = fmt.Sprintf("[%s] %s", f.presetSlot, f.presetName)
 		}
 		pills = append(pills, presetStyle.Render(presetLabel))
-	}
-
-	// Account(s)
-	if f.filter != nil && len(f.filter.Accounts) > 0 {
-		if len(f.filter.Accounts) == 1 {
-			pills = append(pills, f.renderPill("Account", f.filter.Accounts[0]))
-		} else {
-			pills = append(pills, f.renderPill("Accounts", strings.Join(f.filter.Accounts, ",")))
-		}
-	}
-
-	// Status
-	if f.filter != nil && len(f.filter.Status) > 0 && len(f.filter.Status) < 4 {
-		// Abbreviate status names
-		var abbrev []string
-		for _, s := range f.filter.Status {
-			switch s {
-			case "Open":
-				abbrev = append(abbrev, "Open")
-			case "Waiting on Red Hat":
-				abbrev = append(abbrev, "WaitRH")
-			case "Waiting on Customer":
-				abbrev = append(abbrev, "WaitCust")
-			case "Closed":
-				abbrev = append(abbrev, "Closed")
-			default:
-				abbrev = append(abbrev, s)
+	} else {
+		// Only show individual filter pills when no preset is active
+		// Account(s)
+		if f.filter != nil && len(f.filter.Accounts) > 0 {
+			if len(f.filter.Accounts) == 1 {
+				pills = append(pills, f.renderPill("Account", f.filter.Accounts[0]))
+			} else {
+				pills = append(pills, f.renderPill("Accounts", strings.Join(f.filter.Accounts, ",")))
 			}
 		}
-		pills = append(pills, f.renderPill("Status", strings.Join(abbrev, ",")))
-	}
 
-	// Severity
-	if f.filter != nil && len(f.filter.Severity) > 0 && len(f.filter.Severity) < 4 {
-		var sevs []string
-		for _, s := range f.filter.Severity {
-			// Extract just the number
-			if len(s) > 0 {
-				sevs = append(sevs, string(s[0]))
+		// Status
+		if f.filter != nil && len(f.filter.Status) > 0 && len(f.filter.Status) < 4 {
+			// Abbreviate status names
+			var abbrev []string
+			for _, s := range f.filter.Status {
+				switch s {
+				case "Open":
+					abbrev = append(abbrev, "Open")
+				case "Waiting on Red Hat":
+					abbrev = append(abbrev, "WaitRH")
+				case "Waiting on Customer":
+					abbrev = append(abbrev, "WaitCust")
+				case "Closed":
+					abbrev = append(abbrev, "Closed")
+				default:
+					abbrev = append(abbrev, s)
+				}
 			}
+			pills = append(pills, f.renderPill("Status", strings.Join(abbrev, ",")))
 		}
-		pills = append(pills, f.renderPill("Sev", strings.Join(sevs, ",")))
-	}
 
-	// Product
-	if f.filter != nil && f.filter.Product != "" {
-		prod := f.filter.Product
-		if len(prod) > 15 {
-			prod = prod[:15] + "..."
+		// Severity
+		if f.filter != nil && len(f.filter.Severity) > 0 && len(f.filter.Severity) < 4 {
+			var sevs []string
+			for _, s := range f.filter.Severity {
+				// Extract just the number
+				if len(s) > 0 {
+					sevs = append(sevs, string(s[0]))
+				}
+			}
+			pills = append(pills, f.renderPill("Sev", strings.Join(sevs, ",")))
 		}
-		pills = append(pills, f.renderPill("Product", prod))
-	}
 
-	// Keyword
-	if f.filter != nil && f.filter.Keyword != "" {
-		kw := f.filter.Keyword
-		if len(kw) > 15 {
-			kw = kw[:15] + "..."
+		// Product
+		if f.filter != nil && f.filter.Product != "" {
+			prod := f.filter.Product
+			if len(prod) > 15 {
+				prod = prod[:15] + "..."
+			}
+			pills = append(pills, f.renderPill("Product", prod))
 		}
-		pills = append(pills, f.renderPill("Keyword", kw))
+
+		// Keyword
+		if f.filter != nil && f.filter.Keyword != "" {
+			kw := f.filter.Keyword
+			if len(kw) > 15 {
+				kw = kw[:15] + "..."
+			}
+			pills = append(pills, f.renderPill("Keyword", kw))
+		}
 	}
 
 	// Join pills
