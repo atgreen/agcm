@@ -96,9 +96,10 @@ In addition to the TUI, agcm provides command-line tools for scripting and autom
 
 ```bash
 agcm list cases                     # List all cases
+agcm list cases 1                   # List using filter preset 1
 agcm list cases --status open       # Filter by status
 agcm list cases --severity 1        # Filter by severity
-agcm list cases --limit 50          # Limit results
+agcm list cases 1 --limit 50        # Preset with limit override
 agcm list accounts                  # List accessible accounts
 ```
 
@@ -114,8 +115,9 @@ agcm show case 01234567 --comments  # Include comments (default)
 ```bash
 agcm export case 01234567           # Export single case
 agcm export case 01234567 01234568  # Export multiple cases
-agcm export cases --output ./cases  # Export all cases to directory
+agcm export cases 1                 # Export using filter preset 1
 agcm export cases --status open     # Export filtered cases
+agcm export cases 1 -d ./exports    # Preset with output dir override
 ```
 
 #### Search
