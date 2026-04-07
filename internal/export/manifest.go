@@ -11,10 +11,10 @@ import (
 
 // Manifest records metadata about an export operation
 type Manifest struct {
-	ExportedAt     time.Time         `json:"exported_at"`
-	TotalCases     int               `json:"total_cases"`
-	FiltersApplied *ManifestFilters  `json:"filters_applied,omitempty"`
-	Cases          []ManifestCase    `json:"cases"`
+	ExportedAt     time.Time        `json:"exported_at"`
+	TotalCases     int              `json:"total_cases"`
+	FiltersApplied *ManifestFilters `json:"filters_applied,omitempty"`
+	Cases          []ManifestCase   `json:"cases"`
 }
 
 // ManifestFilters records what filters were used

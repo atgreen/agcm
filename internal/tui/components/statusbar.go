@@ -148,7 +148,7 @@ func (s *StatusBar) View() string {
 	}
 
 	// Distribute space
-	leftPadding := (s.width - centerLen) / 2 - leftLen
+	leftPadding := (s.width-centerLen)/2 - leftLen
 	if leftPadding < 1 {
 		leftPadding = 1
 	}

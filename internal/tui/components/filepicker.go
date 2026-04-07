@@ -13,7 +13,6 @@ import (
 	"github.com/green/agcm/internal/tui/styles"
 )
 
-
 // formatFilePickerOutput post-processes filepicker output to add full-width backgrounds
 func formatFilePickerOutput(output string, width int) string {
 	lines := strings.Split(output, "\n")
@@ -87,12 +86,12 @@ func NewFilePickerDialog(s *styles.Styles) *FilePickerDialog {
 	fp.SetHeight(15)
 
 	// Style the filepicker for dark background
-	fp.Styles.Cursor = lipgloss.NewStyle().Foreground(lipgloss.Color("212")) // Pink cursor
-	fp.Styles.Symlink = lipgloss.NewStyle().Foreground(lipgloss.Color("36")) // Cyan
-	fp.Styles.Directory = lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true) // Blue, bold
-	fp.Styles.File = lipgloss.NewStyle().Foreground(lipgloss.Color("252")) // Light gray
-	fp.Styles.Permission = lipgloss.NewStyle().Foreground(lipgloss.Color("244")) // Gray
-	fp.Styles.Selected = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true) // Pink, bold
+	fp.Styles.Cursor = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))                                  // Pink cursor
+	fp.Styles.Symlink = lipgloss.NewStyle().Foreground(lipgloss.Color("36"))                                  // Cyan
+	fp.Styles.Directory = lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true)                     // Blue, bold
+	fp.Styles.File = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))                                    // Light gray
+	fp.Styles.Permission = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))                              // Gray
+	fp.Styles.Selected = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)                     // Pink, bold
 	fp.Styles.FileSize = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Width(7).Align(lipgloss.Right) // Dim gray, right-aligned
 	fp.Styles.EmptyDirectory = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Italic(true)
 

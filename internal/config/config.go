@@ -29,10 +29,16 @@ type FilterPreset struct {
 
 // Config represents the application configuration
 type Config struct {
-	API      APIConfig              `yaml:"api"`
-	UI       UIConfig               `yaml:"ui"`
-	Defaults DefaultsConfig         `yaml:"defaults"`
+	API      APIConfig                `yaml:"api"`
+	UI       UIConfig                 `yaml:"ui"`
+	Debug    DebugConfig              `yaml:"debug"`
+	Defaults DefaultsConfig           `yaml:"defaults"`
 	Presets  map[string]*FilterPreset `yaml:"presets,omitempty"`
+}
+
+// DebugConfig contains debug-related settings
+type DebugConfig struct {
+	LogFile string `yaml:"log_file"` // Path to debug log file (overridden by --debug-log flag)
 }
 
 // APIConfig contains API-related settings
@@ -182,4 +188,23 @@ func (m *Manager) SetPreset(slot string, preset *FilterPreset) {
 // GetPresets returns all presets
 func (m *Manager) GetPresets() map[string]*FilterPreset {
 	return m.config.Presets
+}
+
+// GetDebugLogFile returns the configured debug log file path, or empty string if not set
+func (m *Manager) GetDebugLogFile() string {
+	return m.config.Debug.LogFile
+}
+
+// DefaultDebugLogPath returns the platform-appropriate default debug log path.
+// It respects XDG_CACHE_HOME, falling back to ~/.cache/agcm/debug.log.
+func DefaultDebugLogPath() (string, error) {
+	if xdgCache := os.Getenv("XDG_CACHE_HOME"); xdgCache != "" {
+		return filepath.Join(xdgCache, "agcm", "debug.log"), nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(home, ".cache", "agcm", "debug.log"), nil
 }

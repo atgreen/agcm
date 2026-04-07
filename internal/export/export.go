@@ -18,15 +18,16 @@ import (
 // Options configures the export operation
 type Options struct {
 	OutputDir          string
-	OutputFile         string   // For single-file combined export
-	Format             string   // "markdown" or "json"
+	OutputFile         string // For single-file combined export
+	Format             string // "markdown" or "json"
 	IncludeAttachments bool
 	AttachmentsDir     string
-	Combined           bool     // Combine all cases into single file
+	Combined           bool // Combine all cases into single file
 	Concurrency        int
 	TemplatePath       string   // Custom template file
 	CaseNumbers        []string // Specific cases to export
 	Debug              bool     // Enable debug logging
+	DebugFile          *os.File // Debug log file (if nil, debug output goes to stderr)
 }
 
 // DefaultOptions returns sensible defaults
@@ -41,11 +42,11 @@ func DefaultOptions() *Options {
 
 // Progress reports export progress
 type Progress struct {
-	TotalCases      int
-	CompletedCases  int
-	CurrentCase     string
-	CurrentStep     string
-	Error           error
+	TotalCases     int
+	CompletedCases int
+	CurrentCase    string
+	CurrentStep    string
+	Error          error
 }
 
 // Exporter handles bulk case exports
@@ -57,8 +58,14 @@ type Exporter struct {
 
 // debugf prints debug messages if debug mode is enabled
 func (e *Exporter) debugf(format string, args ...interface{}) {
-	if e.opts.Debug {
-		fmt.Fprintf(os.Stderr, "[DEBUG] "+format+"\n", args...)
+	if !e.opts.Debug {
+		return
+	}
+	msg := fmt.Sprintf("[export] "+format+"\n", args...)
+	if e.opts.DebugFile != nil {
+		_, _ = fmt.Fprint(e.opts.DebugFile, msg)
+	} else {
+		_, _ = fmt.Fprint(os.Stderr, msg)
 	}
 }
 

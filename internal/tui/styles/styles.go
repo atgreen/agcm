@@ -6,21 +6,21 @@ import "github.com/charmbracelet/lipgloss"
 
 // ColorScheme holds colors for a theme
 type ColorScheme struct {
-	Primary     lipgloss.Color
-	Secondary   lipgloss.Color
-	Accent      lipgloss.Color
-	Success     lipgloss.Color
-	Warning     lipgloss.Color
-	Error       lipgloss.Color
-	Muted       lipgloss.Color
-	Background  lipgloss.Color
-	Foreground  lipgloss.Color
-	Border      lipgloss.Color
-	Highlight   lipgloss.Color
-	Severity1   lipgloss.Color // Critical
-	Severity2   lipgloss.Color // High
-	Severity3   lipgloss.Color // Normal
-	Severity4   lipgloss.Color // Low
+	Primary    lipgloss.Color
+	Secondary  lipgloss.Color
+	Accent     lipgloss.Color
+	Success    lipgloss.Color
+	Warning    lipgloss.Color
+	Error      lipgloss.Color
+	Muted      lipgloss.Color
+	Background lipgloss.Color
+	Foreground lipgloss.Color
+	Border     lipgloss.Color
+	Highlight  lipgloss.Color
+	Severity1  lipgloss.Color // Critical
+	Severity2  lipgloss.Color // High
+	Severity3  lipgloss.Color // Normal
+	Severity4  lipgloss.Color // Low
 }
 
 // DarkColors returns the dark theme color scheme
@@ -67,58 +67,58 @@ func LightColors() ColorScheme {
 
 // Legacy color variables for backwards compatibility
 var (
-	ColorPrimary     = lipgloss.Color("#7C3AED")
-	ColorSecondary   = lipgloss.Color("#06B6D4")
-	ColorAccent      = lipgloss.Color("#F59E0B")
-	ColorSuccess     = lipgloss.Color("#10B981")
-	ColorWarning     = lipgloss.Color("#F59E0B")
-	ColorError       = lipgloss.Color("#EF4444")
-	ColorMuted       = lipgloss.Color("#6B7280")
-	ColorBackground  = lipgloss.Color("#1F2937")
-	ColorForeground  = lipgloss.Color("#F9FAFB")
-	ColorBorder      = lipgloss.Color("#374151")
-	ColorHighlight   = lipgloss.Color("#3B82F6")
-	ColorSeverity1   = lipgloss.Color("#EF4444")
-	ColorSeverity2   = lipgloss.Color("#F59E0B")
-	ColorSeverity3   = lipgloss.Color("#3B82F6")
-	ColorSeverity4   = lipgloss.Color("#6B7280")
+	ColorPrimary    = lipgloss.Color("#7C3AED")
+	ColorSecondary  = lipgloss.Color("#06B6D4")
+	ColorAccent     = lipgloss.Color("#F59E0B")
+	ColorSuccess    = lipgloss.Color("#10B981")
+	ColorWarning    = lipgloss.Color("#F59E0B")
+	ColorError      = lipgloss.Color("#EF4444")
+	ColorMuted      = lipgloss.Color("#6B7280")
+	ColorBackground = lipgloss.Color("#1F2937")
+	ColorForeground = lipgloss.Color("#F9FAFB")
+	ColorBorder     = lipgloss.Color("#374151")
+	ColorHighlight  = lipgloss.Color("#3B82F6")
+	ColorSeverity1  = lipgloss.Color("#EF4444")
+	ColorSeverity2  = lipgloss.Color("#F59E0B")
+	ColorSeverity3  = lipgloss.Color("#3B82F6")
+	ColorSeverity4  = lipgloss.Color("#6B7280")
 )
 
 // Styles contains all the application styles
 type Styles struct {
-	App           lipgloss.Style
-	Header        lipgloss.Style
-	Footer        lipgloss.Style
-	Sidebar       lipgloss.Style
-	Content       lipgloss.Style
-	Title         lipgloss.Style
-	Subtitle      lipgloss.Style
-	Label         lipgloss.Style
-	Value         lipgloss.Style
-	Muted         lipgloss.Style
-	Selected      lipgloss.Style
-	Focused       lipgloss.Style
-	Border        lipgloss.Style
-	StatusBar     lipgloss.Style
-	HelpKey       lipgloss.Style
-	HelpDesc      lipgloss.Style
-	Error         lipgloss.Style
-	Success       lipgloss.Style
-	Warning       lipgloss.Style
-	ListItem      lipgloss.Style
+	App              lipgloss.Style
+	Header           lipgloss.Style
+	Footer           lipgloss.Style
+	Sidebar          lipgloss.Style
+	Content          lipgloss.Style
+	Title            lipgloss.Style
+	Subtitle         lipgloss.Style
+	Label            lipgloss.Style
+	Value            lipgloss.Style
+	Muted            lipgloss.Style
+	Selected         lipgloss.Style
+	Focused          lipgloss.Style
+	Border           lipgloss.Style
+	StatusBar        lipgloss.Style
+	HelpKey          lipgloss.Style
+	HelpDesc         lipgloss.Style
+	Error            lipgloss.Style
+	Success          lipgloss.Style
+	Warning          lipgloss.Style
+	ListItem         lipgloss.Style
 	ListItemSelected lipgloss.Style
-	CaseNumber    lipgloss.Style
-	Severity1     lipgloss.Style
-	Severity2     lipgloss.Style
-	Severity3     lipgloss.Style
-	Severity4     lipgloss.Style
-	StatusOpen    lipgloss.Style
-	StatusClosed  lipgloss.Style
-	StatusWaiting lipgloss.Style
-	Comment       lipgloss.Style
-	CommentAuthor lipgloss.Style
-	CommentDate   lipgloss.Style
-	Attachment    lipgloss.Style
+	CaseNumber       lipgloss.Style
+	Severity1        lipgloss.Style
+	Severity2        lipgloss.Style
+	Severity3        lipgloss.Style
+	Severity4        lipgloss.Style
+	StatusOpen       lipgloss.Style
+	StatusClosed     lipgloss.Style
+	StatusWaiting    lipgloss.Style
+	Comment          lipgloss.Style
+	CommentAuthor    lipgloss.Style
+	CommentDate      lipgloss.Style
+	Attachment       lipgloss.Style
 }
 
 // DefaultStyles returns styles based on auto-detected terminal background

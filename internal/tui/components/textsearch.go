@@ -194,7 +194,7 @@ func (t *TextSearch) View() string {
 	barStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), true, false, false, false).
 		BorderForeground(lipgloss.Color("240")).
-		Width(t.width - 4).
+		Width(t.width-4).
 		Padding(0, 1)
 
 	return barStyle.Render(content.String())

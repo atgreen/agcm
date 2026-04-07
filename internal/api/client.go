@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +67,8 @@ func WithTokenRefresher(fn func(ctx context.Context) (string, error)) ClientOpti
 }
 
 // WithDebug enables debug output to /tmp/agcm-debug.log
+//
+// Deprecated: Use WithDebugLog instead to specify a custom log path.
 func WithDebug(debug bool) ClientOption {
 	return func(c *Client) {
 		c.debug = debug
@@ -74,6 +77,22 @@ func WithDebug(debug bool) ClientOption {
 			if err == nil {
 				c.debugFile = f
 			}
+		}
+	}
+}
+
+// WithDebugLog enables debug output to the specified file path.
+// Parent directories are created automatically.
+func WithDebugLog(path string) ClientOption {
+	return func(c *Client) {
+		c.debug = true
+		dir := filepath.Dir(path)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return
+		}
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err == nil {
+			c.debugFile = f
 		}
 	}
 }
@@ -100,6 +119,11 @@ func (c *Client) Close() error {
 		return err
 	}
 	return nil
+}
+
+// DebugFile returns the debug log file, or nil if debug logging is not enabled.
+func (c *Client) DebugFile() *os.File {
+	return c.debugFile
 }
 
 // SetToken updates the access token

@@ -30,6 +30,8 @@ go test -v -run TestName ./path/to/package
   - `cmd/root.go` - Root command, TUI launch, initializes API client and auth
   - `cmd/auth.go` - `auth login|logout|status` subcommands
   - `cmd/list.go`, `cmd/show.go`, `cmd/search.go`, `cmd/export.go` - Non-TUI CLI commands
+  - `cmd/mcp.go` - `mcp` subcommand, starts MCP server over stdio
+  - `cmd/completion.go` - `completion` subcommand, generates shell completions
 
 - **internal/api/** - Red Hat Customer Portal API client
   - `client.go` - HTTP client with token refresh handling
@@ -45,8 +47,12 @@ go test -v -run TestName ./path/to/package
 
 - **internal/export/** - Case export to markdown
   - `export.go` - Exporter with concurrent case fetching
-  - `markdown.go` - Formatter using Go templates
+  - `markdown.go` - Formatter using Go templates (exports `CleanHTML` for reuse)
   - `manifest.go` - Export manifest tracking
+
+- **internal/mcp/** - MCP (Model Context Protocol) server
+  - `server.go` - Server setup, stdio transport
+  - `tools.go` - Tool definitions and handlers (list_cases, get_case, search, get_solution, get_article, export_case)
 
 - **internal/tui/** - Bubble Tea TUI
   - `app.go` - Main model, Update/View loop, state management
@@ -68,7 +74,8 @@ Config stored at `~/.config/agcm/config.yaml` (or `$XDG_CONFIG_HOME/agcm/`):
 - `api.base_url` - API endpoint (default: https://api.access.redhat.com)
 - `defaults.account_number` - Default account filter
 - `defaults.group_number` - Default group filter
+- `debug.log_file` - Custom debug log file path
 
 ## Debug Mode
 
-Run with `--debug` flag to write API requests/responses to `/tmp/agcm-debug.log`. Set `AGCM_DEBUG_LAYOUT=1` for TUI layout debugging.
+Run with `--debug` flag to write API requests/responses to `~/.cache/agcm/debug.log` (respects `$XDG_CACHE_HOME`). Override with `--debug-log <path>` or `debug.log_file` in config. Set `AGCM_DEBUG_LAYOUT=1` for TUI layout debugging.

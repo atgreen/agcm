@@ -16,17 +16,18 @@ import (
 )
 
 var (
-	cfgDir        string
-	debugMode     bool
-	maskMode      bool
-	tuiAccounts   string
-	tuiGroup      string
-	tuiPreset     string
-	configMgr     *config.Manager
-	tokenMgr      *auth.TokenManager
-	storage       *auth.Storage
-	apiClient     *api.Client
-	version       string
+	cfgDir       string
+	debugMode    bool
+	debugLogPath string
+	maskMode     bool
+	tuiAccounts  string
+	tuiGroup     string
+	tuiPreset    string
+	configMgr    *config.Manager
+	tokenMgr     *auth.TokenManager
+	storage      *auth.Storage
+	apiClient    *api.Client
+	version      string
 )
 
 // SetVersion sets the application version (called from main)
@@ -110,6 +111,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgDir, "config", defaultCfgDir, "config directory")
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "enable debug output")
+	rootCmd.PersistentFlags().StringVar(&debugLogPath, "debug-log", "", "debug log file path (default: ~/.cache/agcm/debug.log)")
 
 	// TUI-specific flags (on root command, not persistent)
 	rootCmd.Flags().StringVarP(&tuiAccounts, "account", "a", "", "filter by account number(s), comma-separated")
@@ -151,13 +153,20 @@ func initApp() error {
 	tokenMgr = auth.NewTokenManager(token)
 
 	// Initialize API client
-	apiClient = api.NewClient(
+	clientOpts := []api.ClientOption{
 		api.WithBaseURL(configMgr.GetBaseURL()),
 		api.WithTokenRefresher(func(ctx context.Context) (string, error) {
 			return tokenMgr.GetAccessToken(ctx)
 		}),
-		api.WithDebug(debugMode),
-	)
+	}
+
+	if debugMode {
+		logPath := resolveDebugLogPath()
+		fmt.Fprintf(os.Stderr, "Debug logging to %s\n", logPath)
+		clientOpts = append(clientOpts, api.WithDebugLog(logPath))
+	}
+
+	apiClient = api.NewClient(clientOpts...)
 
 	return nil
 }
@@ -180,4 +189,35 @@ func IsDebugMode() bool {
 // GetStorage returns the auth storage
 func GetStorage() *auth.Storage {
 	return storage
+}
+
+// GetDebugLogPath returns the resolved debug log file path.
+// Returns empty string if debug mode is not enabled.
+func GetDebugLogPath() string {
+	if !debugMode {
+		return ""
+	}
+	return resolveDebugLogPath()
+}
+
+// resolveDebugLogPath determines the debug log path from flag, config, or default.
+func resolveDebugLogPath() string {
+	// 1. CLI flag takes priority
+	if debugLogPath != "" {
+		return debugLogPath
+	}
+
+	// 2. Config file setting
+	if configMgr != nil {
+		if p := configMgr.GetDebugLogFile(); p != "" {
+			return p
+		}
+	}
+
+	// 3. Platform-appropriate default
+	p, err := config.DefaultDebugLogPath()
+	if err != nil {
+		return "/tmp/agcm-debug.log" // last resort fallback
+	}
+	return p
 }

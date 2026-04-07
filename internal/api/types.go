@@ -33,14 +33,14 @@ type Comment struct {
 	ID           string    `json:"id"`
 	CaseNumber   string    `json:"caseNumber,omitempty"`
 	Text         string    `json:"text"`
-	CommentBody  string    `json:"commentBody"`  // Alternative field name
+	CommentBody  string    `json:"commentBody"` // Alternative field name
 	Author       string    `json:"createdBy"`
 	AuthorEmail  string    `json:"createdByEmail,omitempty"`
 	CreatedDate  time.Time `json:"createdDate"`
 	LastModified time.Time `json:"lastModifiedDate,omitempty"`
 	Public       bool      `json:"public"`
-	IsPublic     bool      `json:"isPublic"`     // Alternative field name
-	CasePublic   bool      `json:"casePublic"`   // Another alternative
+	IsPublic     bool      `json:"isPublic"`   // Alternative field name
+	CasePublic   bool      `json:"casePublic"` // Another alternative
 	Draft        bool      `json:"draft"`
 	URI          string    `json:"uri,omitempty"`
 }
@@ -60,18 +60,18 @@ func (c *Comment) GetText() string {
 
 // Attachment represents a file attached to a case
 type Attachment struct {
-	UUID         string    `json:"uuid"`
-	Filename     string    `json:"fileName"`
-	Description  string    `json:"description,omitempty"`
-	Length       int64     `json:"length"`
-	Size         int64     `json:"size"`
-	FileSize     int64     `json:"fileSize"`
-	ContentLength int64    `json:"contentLength"`
-	MimeType     string    `json:"mimeType,omitempty"`
-	CreatedBy    string    `json:"createdBy"`
-	CreatedDate  time.Time `json:"createdDate"`
-	LastModified time.Time `json:"lastModifiedDate,omitempty"`
-	URI          string    `json:"uri,omitempty"`
+	UUID          string    `json:"uuid"`
+	Filename      string    `json:"fileName"`
+	Description   string    `json:"description,omitempty"`
+	Length        int64     `json:"length"`
+	Size          int64     `json:"size"`
+	FileSize      int64     `json:"fileSize"`
+	ContentLength int64     `json:"contentLength"`
+	MimeType      string    `json:"mimeType,omitempty"`
+	CreatedBy     string    `json:"createdBy"`
+	CreatedDate   time.Time `json:"createdDate"`
+	LastModified  time.Time `json:"lastModifiedDate,omitempty"`
+	URI           string    `json:"uri,omitempty"`
 }
 
 // Solution represents a knowledge base solution
@@ -130,19 +130,19 @@ type CaseFilter struct {
 	Count         int        `json:"count,omitempty"`
 	StartIndex    int        `json:"startIndex,omitempty"`
 	IncludeClosed bool       `json:"includeClosed,omitempty"`
-	Accounts      []string   `json:"accounts,omitempty"`    // Filter by account number(s)
-	GroupNumber   string     `json:"groupNumber,omitempty"` // Filter by case group
+	Accounts      []string   `json:"accounts,omitempty"`     // Filter by account number(s)
+	GroupNumber   string     `json:"groupNumber,omitempty"`  // Filter by case group
 	OwnerSSOName  string     `json:"ownerSSOName,omitempty"` // Filter by owner
 }
 
 // SearchResult represents a search result item
 type SearchResult struct {
-	Type        string `json:"type"` // "case", "solution", "article"
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Abstract    string `json:"abstract,omitempty"`
-	URI         string `json:"uri,omitempty"`
-	Score       float64 `json:"score,omitempty"`
+	Type     string  `json:"type"` // "case", "solution", "article"
+	ID       string  `json:"id"`
+	Title    string  `json:"title"`
+	Abstract string  `json:"abstract,omitempty"`
+	URI      string  `json:"uri,omitempty"`
+	Score    float64 `json:"score,omitempty"`
 }
 
 // ListResponse is a generic paginated response

@@ -72,15 +72,15 @@ type KCSSearchResponse struct {
 		NumFound int `json:"numFound"`
 		Start    int `json:"start"`
 		Docs     []struct {
-			ID              string   `json:"id"`
-			AllTitle        string   `json:"allTitle"`
-			Abstract        string   `json:"abstract,omitempty"`
-			DocumentKind    string   `json:"documentKind"`
-			URI             string   `json:"uri,omitempty"`
-			View_URI        string   `json:"view_uri,omitempty"`
-			PublishedTitle  string   `json:"publishedTitle,omitempty"`
-			PortalTags      []string `json:"portal_tags,omitempty"`
-			LastModifiedDate string  `json:"lastModifiedDate,omitempty"`
+			ID               string   `json:"id"`
+			AllTitle         string   `json:"allTitle"`
+			Abstract         string   `json:"abstract,omitempty"`
+			DocumentKind     string   `json:"documentKind"`
+			URI              string   `json:"uri,omitempty"`
+			View_URI         string   `json:"view_uri,omitempty"`
+			PublishedTitle   string   `json:"publishedTitle,omitempty"`
+			PortalTags       []string `json:"portal_tags,omitempty"`
+			LastModifiedDate string   `json:"lastModifiedDate,omitempty"`
 		} `json:"docs"`
 	} `json:"response"`
 }

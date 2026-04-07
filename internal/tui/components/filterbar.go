@@ -14,13 +14,13 @@ import (
 
 // FilterBar shows active filters as pills
 type FilterBar struct {
-	styles      *styles.Styles
-	width       int
-	filter      *api.CaseFilter
-	caseCount   int
-	totalCount  int
-	presetSlot  string
-	presetName  string
+	styles     *styles.Styles
+	width      int
+	filter     *api.CaseFilter
+	caseCount  int
+	totalCount int
+	presetSlot string
+	presetName string
 }
 
 // NewFilterBar creates a new filter bar

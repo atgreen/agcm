@@ -56,22 +56,22 @@ Examples:
 
 var (
 	// Export flags
-	exportOutput          string
-	exportOutputDir       string
-	exportFormat          string
-	exportCombined        bool
-	exportBundle          bool
-	exportIncludeAttach   bool
-	exportAttachmentsDir  string
-	exportTemplate        string
-	exportConcurrency     int
+	exportOutput         string
+	exportOutputDir      string
+	exportFormat         string
+	exportCombined       bool
+	exportBundle         bool
+	exportIncludeAttach  bool
+	exportAttachmentsDir string
+	exportTemplate       string
+	exportConcurrency    int
 
 	// Filter flags
-	exportStatus    string
-	exportSeverity  string
-	exportProduct   string
-	exportSince     string
-	exportUntil     string
+	exportStatus   string
+	exportSeverity string
+	exportProduct  string
+	exportSince    string
+	exportUntil    string
 )
 
 func init() {
@@ -127,6 +127,7 @@ func runExportCase(cmd *cobra.Command, args []string) error {
 		TemplatePath:       exportTemplate,
 		CaseNumbers:        args,
 		Debug:              IsDebugMode(),
+		DebugFile:          client.DebugFile(),
 	}
 
 	exporter, err := export.NewExporter(client, opts)
@@ -278,6 +279,7 @@ func runExportCases(cmd *cobra.Command, args []string) error {
 		Concurrency:        exportConcurrency,
 		TemplatePath:       exportTemplate,
 		Debug:              IsDebugMode(),
+		DebugFile:          client.DebugFile(),
 	}
 
 	exporter, err := export.NewExporter(client, opts)

@@ -6,29 +6,29 @@ import "github.com/charmbracelet/bubbles/key"
 
 // KeyMap defines all keyboard shortcuts
 type KeyMap struct {
-	Up          key.Binding
-	Down        key.Binding
-	Left        key.Binding
-	Right       key.Binding
-	Top         key.Binding
-	Bottom      key.Binding
-	PageUp      key.Binding
-	PageDown    key.Binding
-	Select      key.Binding
-	Back        key.Binding
-	Tab         key.Binding
-	ShiftTab    key.Binding
-	Search      key.Binding
-	Filter      key.Binding
-	Sort        key.Binding
-	Refresh     key.Binding
-	Help        key.Binding
-	Quit        key.Binding
-	Copy        key.Binding
-	Open        key.Binding
-	Export      key.Binding
-	BulkExport  key.Binding
-	TextSearch  key.Binding
+	Up         key.Binding
+	Down       key.Binding
+	Left       key.Binding
+	Right      key.Binding
+	Top        key.Binding
+	Bottom     key.Binding
+	PageUp     key.Binding
+	PageDown   key.Binding
+	Select     key.Binding
+	Back       key.Binding
+	Tab        key.Binding
+	ShiftTab   key.Binding
+	Search     key.Binding
+	Filter     key.Binding
+	Sort       key.Binding
+	Refresh    key.Binding
+	Help       key.Binding
+	Quit       key.Binding
+	Copy       key.Binding
+	Open       key.Binding
+	Export     key.Binding
+	BulkExport key.Binding
+	TextSearch key.Binding
 }
 
 // DefaultKeyMap returns the default key bindings

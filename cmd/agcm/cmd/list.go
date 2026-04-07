@@ -170,7 +170,7 @@ func runListCases(cmd *cobra.Command, args []string) error {
 	// Remaining space split between PRODUCT and SUMMARY
 	fixedWidth := 48
 	remaining := termWidth - fixedWidth
-	productWidth := remaining / 4       // 25% for product
+	productWidth := remaining / 4            // 25% for product
 	summaryWidth := remaining - productWidth // 75% for summary
 
 	if productWidth < 15 {

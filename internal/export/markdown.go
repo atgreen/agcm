@@ -71,10 +71,10 @@ const DefaultTemplate = `# Case {{.Case.CaseNumber}}: {{.Case.Summary}}
 
 // CaseExport contains all data for exporting a case
 type CaseExport struct {
-	Case       *api.Case
-	Comments   []api.Comment
+	Case        *api.Case
+	Comments    []api.Comment
 	Attachments []api.Attachment
-	ExportedAt time.Time
+	ExportedAt  time.Time
 }
 
 // Formatter handles markdown formatting
@@ -92,7 +92,7 @@ func NewFormatterWithTemplate(tmplStr string) (*Formatter, error) {
 	funcMap := template.FuncMap{
 		"formatTime": formatTime,
 		"formatSize": formatSize,
-		"cleanHTML":  cleanHTML,
+		"cleanHTML":  CleanHTML,
 		"truncUUID":  truncUUID,
 		"add":        func(a, b int) int { return a + b },
 	}
@@ -159,8 +159,8 @@ func formatSize(bytes int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
-// cleanHTML converts HTML to plain text/markdown
-func cleanHTML(s string) string {
+// CleanHTML converts HTML to plain text/markdown
+func CleanHTML(s string) string {
 	// Decode HTML entities
 	s = html.UnescapeString(s)
 

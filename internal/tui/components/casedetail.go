@@ -21,18 +21,18 @@ var urlRegex = regexp.MustCompile(`https?://[^\s<>"{}|\\^` + "`" + `\[\]]+`)
 
 // CaseDetail displays detailed information about a case
 type CaseDetail struct {
-	viewport        viewport.Model
-	styles          *styles.Styles
-	keys            *styles.KeyMap
-	case_           *api.Case
-	comments        []api.Comment
-	attachments     []api.Attachment
-	width           int
-	height          int
-	focused         bool
-	activeTab       int    // 0=details, 1=comments, 2=attachments
-	currentComment  int    // Current comment index for n/p navigation
-	commentOffsets  []int  // Line offsets for each comment
+	viewport         viewport.Model
+	styles           *styles.Styles
+	keys             *styles.KeyMap
+	case_            *api.Case
+	comments         []api.Comment
+	attachments      []api.Attachment
+	width            int
+	height           int
+	focused          bool
+	activeTab        int    // 0=details, 1=comments, 2=attachments
+	currentComment   int    // Current comment index for n/p navigation
+	commentOffsets   []int  // Line offsets for each comment
 	searchHighlight  string // Current search highlight term
 	currentMatchTab  int    // Tab index of current match (0=details, 1=comments)
 	currentMatchLine int    // Line number of current match
@@ -84,7 +84,7 @@ func (c *CaseDetail) SetAttachments(attachments []api.Attachment) {
 func (c *CaseDetail) SetSize(width, height int) {
 	c.width = width
 	c.height = height
-	c.viewport.Width = width - 5 // Account for border (2) + space (1) + scrollbar (2)
+	c.viewport.Width = width - 5   // Account for border (2) + space (1) + scrollbar (2)
 	c.viewport.Height = height - 4 // Account for border (2) + tabs (1) + separator (1)
 	c.updateContent()
 }
@@ -354,7 +354,7 @@ func (c *CaseDetail) renderComments() string {
 	sb.WriteString("\n\n")
 	lineCount += 2
 
-	indent := "      " // 6-space indent for comment content
+	indent := "      "        // 6-space indent for comment content
 	lineWidth := c.width - 10 // Full width for separator lines
 
 	for i, comment := range c.comments {

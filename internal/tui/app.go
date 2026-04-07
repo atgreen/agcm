@@ -24,7 +24,6 @@ import (
 	"github.com/green/agcm/internal/tui/styles"
 )
 
-
 // Pane represents which pane is focused
 type Pane int
 
@@ -93,15 +92,15 @@ type Model struct {
 	filePicker *components.FilePickerDialog
 
 	// State
-	currentPane       Pane
-	showHelp          bool
-	cases             []api.Case
-	sortField         SortField
-	sortReverse       bool
-	err               error
-	loadingCases      bool
-	loadingDetail     bool
-	initialLoadDone   bool // Set true after first successful case load
+	currentPane      Pane
+	showHelp         bool
+	cases            []api.Case
+	sortField        SortField
+	sortReverse      bool
+	err              error
+	loadingCases     bool
+	loadingDetail    bool
+	initialLoadDone  bool   // Set true after first successful case load
 	highlightedCase  string // Currently highlighted case number
 	pendingFetch     string // Case number waiting to be fetched (debounce)
 	detailCache      map[string]*CachedCaseDetail

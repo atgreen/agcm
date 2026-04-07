@@ -15,6 +15,8 @@ A terminal user interface (TUI) for the Red Hat Customer Portal API.
 - **Text Search** - Search within case content with `Ctrl+F`
 - **Export** - Export individual cases or bulk export all cases to markdown
 - **Mouse Support** - Click to select cases, scroll, switch tabs, and open links
+- **MCP Server** - AI assistant integration via Model Context Protocol (`agcm mcp`)
+- **Shell Completions** - Tab completion for bash, zsh, fish, and PowerShell
 - **Cross-Platform** - Builds for Linux, macOS, and Windows
 
 ## Installation
@@ -128,6 +130,43 @@ agcm search "kernel panic"          # Search cases and solutions
 agcm search "NVMe driver" --limit 20
 ```
 
+#### MCP Server (AI Assistant Integration)
+
+agcm can run as an [MCP](https://modelcontextprotocol.io/) server, allowing AI assistants like Claude to interact with Red Hat support cases.
+
+```bash
+agcm mcp                # Start MCP server over stdio
+```
+
+To use with Claude Code or Claude Desktop, add to your MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "agcm": {
+      "command": "agcm",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Available tools: `list_cases`, `get_case`, `search`, `get_solution`, `get_article`, `export_case`
+
+#### Shell Completions
+
+```bash
+agcm completion bash        # Generate bash completions
+agcm completion zsh         # Generate zsh completions
+agcm completion fish        # Generate fish completions
+agcm completion powershell  # Generate PowerShell completions
+
+# Example: enable for current bash session
+source <(agcm completion bash)
+```
+
+Run `agcm completion --help` for per-shell installation instructions.
+
 #### Authentication & Updates
 
 ```bash
@@ -137,6 +176,15 @@ agcm auth status        # Check authentication status
 agcm update             # Update to latest version
 agcm update --check     # Check for updates without installing
 ```
+
+#### Debugging
+
+```bash
+agcm --debug list cases                    # Debug log to ~/.cache/agcm/debug.log
+agcm --debug --debug-log /tmp/my.log ...   # Custom debug log path
+```
+
+The debug log path can also be set in `config.yaml` via `debug.log_file`.
 
 ## Keyboard Shortcuts (TUI)
 
