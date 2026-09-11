@@ -3,7 +3,6 @@
 package components
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -11,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/green/agcm/internal/api"
 	"github.com/green/agcm/internal/tui/styles"
+	"github.com/mattn/go-runewidth"
 )
 
 // SortField represents the field to sort by
@@ -547,8 +547,13 @@ func (c *CaseList) renderScrollbar(height int) string {
 }
 
 func (c *CaseList) renderRow(cs *api.Case, width int, selected bool) string {
-	// Format date
-	date := cs.LastModified.Format("Jan 02 2006")
+	// The date column follows the header: created date when sorting by
+	// creation time, last-modified otherwise
+	date := cs.LastModified
+	if c.sortField == SortByCreated {
+		date = cs.CreatedDate
+	}
+	dateStr := date.Format("Jan 02 2006")
 
 	// Extract severity number
 	sev := cs.Severity
@@ -556,11 +561,7 @@ func (c *CaseList) renderRow(cs *api.Case, width int, selected bool) string {
 		sev = string(sev[0])
 	}
 
-	// Truncate status if needed
-	status := cs.Status
-	if len(status) > colStatus {
-		status = status[:colStatus-1] + "…"
-	}
+	status := runewidth.Truncate(cs.Status, colStatus, "…")
 
 	// Calculate remaining width for summary
 	descWidth := width - colCase - colDate - colStatus - colSev - 4
@@ -568,34 +569,23 @@ func (c *CaseList) renderRow(cs *api.Case, width int, selected bool) string {
 		descWidth = 10
 	}
 
-	summary := cs.Summary
 	// Strip control characters and non-printable chars to prevent rendering issues
-	summary = stripNonPrintable(summary)
+	summary := stripNonPrintable(cs.Summary)
 	if c.maskMode {
 		summary = maskText(summary)
 	}
-	if len(summary) > descWidth {
-		summary = summary[:descWidth-1] + "…"
-	}
-
-	// Build the row
-	row := fmt.Sprintf("%-*s %-*s %-*s %-*s %s",
-		colCase, cs.CaseNumber,
-		colDate, date,
-		colSev, sev,
-		colStatus, status,
-		summary,
-	)
+	summary = runewidth.Truncate(summary, descWidth, "…")
 
 	if selected {
+		row := padRight(cs.CaseNumber, colCase) + " " + padRight(dateStr, colDate) + " " +
+			padRight(sev, colSev) + " " + padRight(status, colStatus) + " " + summary
 		return c.styles.ListItemSelected.Width(width).Render(row)
 	}
 
 	// Apply severity color to the severity column only
-	caseNum := c.styles.CaseNumber.Render(fmt.Sprintf("%-*s", colCase, cs.CaseNumber))
-	dateStr := fmt.Sprintf("%-*s", colDate, date)
-	sevStr := c.styles.SeverityStyle(cs.Severity).Render(fmt.Sprintf("%-*s", colSev, sev))
-	statusStr := c.styles.StatusStyle(cs.Status).Render(fmt.Sprintf("%-*s", colStatus, status))
+	caseNum := c.styles.CaseNumber.Render(padRight(cs.CaseNumber, colCase))
+	sevStr := c.styles.SeverityStyle(cs.Severity).Render(padRight(sev, colSev))
+	statusStr := c.styles.StatusStyle(cs.Status).Render(padRight(status, colStatus))
 
-	return fmt.Sprintf("%s %s %s %s %s", caseNum, dateStr, sevStr, statusStr, summary)
+	return caseNum + " " + padRight(dateStr, colDate) + " " + sevStr + " " + statusStr + " " + summary
 }

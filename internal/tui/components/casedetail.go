@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/green/agcm/internal/api"
 	"github.com/green/agcm/internal/tui/styles"
+	"github.com/mattn/go-runewidth"
 )
 
 // URL regex pattern
@@ -456,7 +457,7 @@ func (c *CaseDetail) renderAttachments() string {
 		if c.maskMode {
 			filename = maskText(filename)
 		}
-		filename = truncateSimple(filename, filenameCol)
+		filename = runewidth.FillRight(truncateSimple(filename, filenameCol), filenameCol)
 
 		size := "n/a"
 		if attSize, ok := attachmentSize(att); ok {
@@ -464,8 +465,8 @@ func (c *CaseDetail) renderAttachments() string {
 		}
 		date := att.CreatedDate.Format("2006-01-02")
 
-		line := fmt.Sprintf("%-*s%*s%-*s%*s%-*s",
-			filenameCol, filename,
+		line := fmt.Sprintf("%s%*s%-*s%*s%-*s",
+			filename,
 			gap, "",
 			sizeCol, size,
 			gap, "",
@@ -556,13 +557,7 @@ func truncateSimple(s string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	if len(s) <= width {
-		return s
-	}
-	if width <= 3 {
-		return s[:width]
-	}
-	return s[:width-3] + "..."
+	return runewidth.Truncate(s, width, "…")
 }
 
 func padRightSimple(s string, width int) string {

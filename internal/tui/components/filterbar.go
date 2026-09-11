@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/green/agcm/internal/api"
 	"github.com/green/agcm/internal/tui/styles"
+	"github.com/mattn/go-runewidth"
 )
 
 // FilterBar shows active filters as pills
@@ -161,10 +162,7 @@ func (f *FilterBar) View() string {
 		// Product(s)
 		if f.filter != nil && len(f.filter.Products) > 0 {
 			if len(f.filter.Products) == 1 {
-				prod := f.filter.Products[0]
-				if len(prod) > 15 {
-					prod = prod[:15] + "..."
-				}
+				prod := runewidth.Truncate(f.filter.Products[0], 18, "…")
 				pills = append(pills, f.renderPill("Product", prod))
 			} else {
 				// Show count for multiple products
@@ -174,10 +172,7 @@ func (f *FilterBar) View() string {
 
 		// Keyword
 		if f.filter != nil && f.filter.Keyword != "" {
-			kw := f.filter.Keyword
-			if len(kw) > 15 {
-				kw = kw[:15] + "..."
-			}
+			kw := runewidth.Truncate(f.filter.Keyword, 18, "…")
 			pills = append(pills, f.renderPill("Keyword", kw))
 		}
 	}

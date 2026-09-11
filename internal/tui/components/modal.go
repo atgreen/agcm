@@ -62,12 +62,15 @@ func (m *Modal) ShowTextInput(title, message, defaultValue string, onConfirm fun
 	m.visible = true
 }
 
-// ShowProgress shows a progress modal
-func (m *Modal) ShowProgress(title, message string) {
+// ShowProgress shows a progress modal. onCancel is invoked when the user
+// presses Esc while the progress modal is visible.
+func (m *Modal) ShowProgress(title, message string, onCancel func()) {
 	m.modalType = ModalProgress
 	m.title = title
 	m.progressMsg = message
 	m.progress = 0
+	m.onConfirm = nil
+	m.onCancel = onCancel
 	m.visible = true
 }
 
@@ -173,11 +176,10 @@ func (m *Modal) View() string {
 		content.WriteString(m.styles.Muted.Render("Esc to cancel"))
 	}
 
-	// Modal box style with background
+	// Modal box style; no background so it stays readable on any theme
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.styles.Header.GetBackground()).
-		Background(lipgloss.Color("248")).
 		Padding(1, 3).
 		Width(50)
 

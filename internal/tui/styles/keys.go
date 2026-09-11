@@ -24,7 +24,6 @@ type KeyMap struct {
 	Refresh    key.Binding
 	Help       key.Binding
 	Quit       key.Binding
-	Copy       key.Binding
 	Open       key.Binding
 	Export     key.Binding
 	BulkExport key.Binding
@@ -106,10 +105,6 @@ func DefaultKeyMap() *KeyMap {
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
 		),
-		Copy: key.NewBinding(
-			key.WithKeys("y"),
-			key.WithHelp("y", "copy"),
-		),
 		Open: key.NewBinding(
 			key.WithKeys("o"),
 			key.WithHelp("o", "open in browser"),
@@ -140,7 +135,7 @@ func (k *KeyMap) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Top, k.Bottom},
 		{k.PageUp, k.PageDown, k.Tab, k.ShiftTab},
 		{k.Select, k.Back, k.Search, k.Filter},
-		{k.Sort, k.Refresh, k.Copy, k.Open},
+		{k.Sort, k.Refresh, k.Open},
 		{k.Export, k.BulkExport, k.Help, k.Quit},
 	}
 }

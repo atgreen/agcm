@@ -4,11 +4,13 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -22,6 +24,7 @@ import (
 	"github.com/green/agcm/internal/export"
 	"github.com/green/agcm/internal/tui/components"
 	"github.com/green/agcm/internal/tui/styles"
+	"github.com/mattn/go-runewidth"
 )
 
 // Pane represents which pane is focused
@@ -338,13 +341,13 @@ func (m *Model) loadCaseDetail(caseNumber string) tea.Cmd {
 	}
 }
 
-func (m *Model) fetchAllCaseNumbers(ctx context.Context) ([]string, error) {
+func (m *Model) fetchAllCaseNumbers(ctx context.Context, filter *api.CaseFilter) ([]string, error) {
 	start := 0
 	total := -1
 	var caseNumbers []string
 
 	for {
-		reqFilter := m.withDefaults(m.activeFilter, start, casePageSize)
+		reqFilter := m.withDefaults(filter, start, casePageSize)
 		result, err := m.client.ListCases(ctx, reqFilter)
 		if err != nil {
 			return nil, err
@@ -485,8 +488,13 @@ func (m *Model) addOrSelectCase(c *api.Case) {
 	m.highlightedCase = c.CaseNumber
 }
 
-// sortCases sorts the cases based on current sort settings
+// sortCases sorts the cases based on current sort settings, keeping the
+// cursor on the same case across the re-order.
 func (m *Model) sortCases() {
+	selected := ""
+	if sel := m.caseList.SelectedCase(); sel != nil {
+		selected = sel.CaseNumber
+	}
 	sort.Slice(m.cases, func(i, j int) bool {
 		var less bool
 		switch m.sortField {
@@ -508,6 +516,14 @@ func (m *Model) sortCases() {
 	})
 	m.caseList.SetCases(m.cases)
 	m.caseList.SetSort(components.SortField(m.sortField), m.sortReverse)
+	if selected != "" {
+		for i, c := range m.cases {
+			if c.CaseNumber == selected {
+				m.caseList.SetCursor(i)
+				break
+			}
+		}
+	}
 }
 
 // cycleSortField cycles through sort fields
@@ -704,10 +720,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case exportCompleteMsg:
 		m.exporting = false
 		m.exportProgressCh = nil
+		if m.exportCancel != nil {
+			m.exportCancel()
+			m.exportCancel = nil
+		}
 		m.modal.Hide()
-		if msg.err != nil {
+		switch {
+		case errors.Is(msg.err, context.Canceled):
+			m.statusBar.SetMessage(m.styles.Warning.Render("Export cancelled"), 3*time.Second)
+		case msg.err != nil:
 			m.statusBar.SetMessage(m.styles.Error.Render("Export failed: "+msg.err.Error()), 5*time.Second)
-		} else {
+		default:
 			m.statusBar.SetMessage(m.styles.Success.Render("Exported to: "+msg.outputPath), 5*time.Second)
 		}
 
@@ -799,6 +822,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Preset save mode is modal: the next key picks a slot or cancels
+		if m.presetSaveMode {
+			m.presetSaveMode = false
+			s := msg.String()
+			if len(s) == 1 && s >= "0" && s <= "9" {
+				m.savePreset(s)
+			} else {
+				m.statusBar.SetMessage(m.styles.Muted.Render("Preset save cancelled"), 2*time.Second)
+			}
+			return m, nil
+		}
+
 		if key.Matches(msg, m.keys.Help) {
 			m.showHelp = true
 			return m, nil
@@ -857,59 +892,36 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Cancel preset save mode with Escape
-		if m.presetSaveMode && msg.String() == "esc" {
-			m.presetSaveMode = false
-			m.statusBar.SetMessage(m.styles.Muted.Render("Preset save cancelled"), 2*time.Second)
-			return m, nil
-		}
-
-		// Handle digit keys for presets (1-9, 0)
-		if len(msg.String()) == 1 && ((msg.String() >= "1" && msg.String() <= "9") || msg.String() == "0") {
+		// Handle digit keys for loading presets (1-9, 0)
+		if len(msg.String()) == 1 && msg.String() >= "0" && msg.String() <= "9" {
 			slot := msg.String()
-			if m.presetSaveMode {
-				// Save current filter to preset
-				m.presetSaveMode = false
-				if m.activeFilter != nil || len(m.opts.Accounts) > 0 {
-					preset := m.buildPresetFromCurrent()
-					m.configMgr.SetPreset(slot, preset)
-					if err := m.configMgr.Save(); err != nil {
-						m.statusBar.SetMessage(m.styles.Error.Render(fmt.Sprintf("Failed to save preset: %v", err)), 3*time.Second)
-					} else {
-						name := preset.Name
-						if name == "" {
-							name = "Preset " + slot
-						}
-						m.activePreset = slot
-						m.filterBar.SetPreset(slot, preset.Name)
-						m.statusBar.SetMessage(m.styles.Success.Render(fmt.Sprintf("Saved to preset %s: %s", slot, name)), 2*time.Second)
-					}
-				} else {
-					m.statusBar.SetMessage(m.styles.Warning.Render("No filter active to save"), 2*time.Second)
-				}
-				return m, nil
-			} else {
-				// Load preset
-				preset := m.configMgr.GetPreset(slot)
-				if preset != nil {
-					m.activeFilter = m.presetToFilter(preset)
-					m.activePreset = slot
-					m.filterBar.SetFilter(m.activeFilter, 0, 0)
-					m.filterBar.SetPreset(slot, preset.Name)
-					m.updateLayout()
-					m.loadingCases = true
-					m.detailCache = make(map[string]*CachedCaseDetail)
-					name := preset.Name
-					if name == "" {
-						name = "Preset " + slot
-					}
-					m.statusBar.SetMessage(m.styles.Success.Render(fmt.Sprintf("Loaded preset %s: %s", slot, name)), 2*time.Second)
-					return m, tea.Batch(m.loadCasesWithFilter(m.activeFilter), m.spinner.Tick)
-				} else {
-					m.statusBar.SetMessage(m.styles.Muted.Render(fmt.Sprintf("No preset in slot %s (Ctrl+s to save)", slot)), 2*time.Second)
-				}
+			preset := m.configMgr.GetPreset(slot)
+			if preset == nil {
+				m.statusBar.SetMessage(m.styles.Muted.Render(fmt.Sprintf("No preset in slot %s (Ctrl+s to save)", slot)), 2*time.Second)
 				return m, nil
 			}
+			m.activeFilter = m.presetToFilter(preset)
+			m.activePreset = slot
+			m.filterBar.SetFilter(m.activeFilter, 0, 0)
+			m.filterBar.SetPreset(slot, preset.Name)
+			m.updateLayout()
+			m.loadingCases = true
+			m.detailCache = make(map[string]*CachedCaseDetail)
+			name := preset.Name
+			if name == "" {
+				name = "Preset " + slot
+			}
+			m.statusBar.SetMessage(m.styles.Success.Render(fmt.Sprintf("Loaded preset %s: %s", slot, name)), 2*time.Second)
+			return m, tea.Batch(m.loadCasesWithFilter(m.activeFilter), m.spinner.Tick)
+		}
+
+		// Open selected case in the support portal (o)
+		if key.Matches(msg, m.keys.Open) {
+			if sel := m.caseList.SelectedCase(); sel != nil {
+				return m, openURL(casePortalURL(sel.CaseNumber))
+			}
+			m.statusBar.SetMessage(m.styles.Warning.Render("No case selected"), 2*time.Second)
+			return m, nil
 		}
 
 		// Sort controls
@@ -1014,6 +1026,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Pass to focused component
 		switch m.currentPane {
 		case PaneList:
+			// Enter moves focus to the detail pane
+			if key.Matches(msg, m.keys.Select) {
+				m.currentPane = PaneDetail
+				m.updateFocus()
+				return m, nil
+			}
+
 			caseList, cmd := m.caseList.Update(msg)
 			m.caseList = caseList
 			cmds = append(cmds, cmd)
@@ -1042,7 +1061,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case casesLoadedMsg:
 		m.loadingCases = false
-		m.statusBar.SetConnected(true)
 		selectedCase := ""
 		savedOffset := m.caseList.GetOffset()
 		if sel := m.caseList.SelectedCase(); sel != nil {
@@ -1050,8 +1068,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.err = msg.err
+			m.statusBar.SetConnected(false)
 			m.statusBar.SetMessage(m.styles.Error.Render("Error: "+msg.err.Error()), 5*time.Second)
 		} else {
+			m.statusBar.SetConnected(true)
 			if msg.append {
 				m.cases = append(m.cases, msg.cases...)
 			} else {
@@ -1149,13 +1169,20 @@ func (m *Model) togglePane() {
 	m.updateFocus()
 }
 
+// cancelExport aborts any in-flight export; wired to Esc in the progress modal.
+func (m *Model) cancelExport() {
+	if m.exportCancel != nil {
+		m.exportCancel()
+	}
+}
+
 func (m *Model) startSingleExport(caseNumber, filename string) tea.Cmd {
 	m.exporting = true
-	m.modal.ShowProgress("Exporting Case", "Preparing export...")
+	ctx, cancel := context.WithCancel(context.Background())
+	m.exportCancel = cancel
+	m.modal.ShowProgress("Exporting Case", "Preparing export...", m.cancelExport)
 
 	return func() tea.Msg {
-		// Debug: log export attempt
-
 		opts := export.DefaultOptions()
 		opts.OutputFile = filename
 
@@ -1164,7 +1191,6 @@ func (m *Model) startSingleExport(caseNumber, filename string) tea.Cmd {
 			return exportCompleteMsg{err: err}
 		}
 
-		ctx := context.Background()
 		err = exporter.ExportCaseToFile(ctx, caseNumber, filename)
 		if err != nil {
 			return exportCompleteMsg{err: err}
@@ -1179,10 +1205,13 @@ func (m *Model) startBulkExport(outputDir string) tea.Cmd {
 	m.exporting = true
 	ctx, cancel := context.WithCancel(context.Background())
 	m.exportCancel = cancel
-	m.modal.ShowProgress("Exporting Cases", "Starting export...")
+	m.modal.ShowProgress("Exporting Cases", "Starting export...", m.cancelExport)
 	progressCh := make(chan export.Progress, 10)
 	m.exportProgressCh = progressCh
+	filter := m.activeFilter
 	exportCmd := func() tea.Msg {
+		defer close(progressCh)
+
 		opts := export.DefaultOptions()
 		opts.OutputDir = outputDir
 
@@ -1191,13 +1220,12 @@ func (m *Model) startBulkExport(outputDir string) tea.Cmd {
 			return exportCompleteMsg{err: err}
 		}
 
-		caseNumbers, err := m.fetchAllCaseNumbers(ctx)
+		caseNumbers, err := m.fetchAllCaseNumbers(ctx, filter)
 		if err != nil {
 			return exportCompleteMsg{err: err}
 		}
 
 		_, err = exporter.ExportCases(ctx, caseNumbers, progressCh)
-		close(progressCh)
 
 		absPath, _ := filepath.Abs(outputDir)
 		return exportCompleteMsg{outputPath: absPath, err: err}
@@ -1211,18 +1239,21 @@ func (m *Model) startBundleExport(outputDir string) tea.Cmd {
 	m.exporting = true
 	ctx, cancel := context.WithCancel(context.Background())
 	m.exportCancel = cancel
-	m.modal.ShowProgress("Bundle Export", "Starting bundle export...")
+	m.modal.ShowProgress("Bundle Export", "Starting bundle export...", m.cancelExport)
 	progressCh := make(chan export.Progress, 10)
 	m.exportProgressCh = progressCh
+	filter := m.activeFilter
 
 	exportCmd := func() tea.Msg {
+		defer close(progressCh)
+
 		// Create output directory
 		if err := os.MkdirAll(outputDir, 0755); err != nil {
 			return exportCompleteMsg{err: fmt.Errorf("failed to create output directory: %w", err)}
 		}
 
 		// Get all case numbers
-		caseNumbers, err := m.fetchAllCaseNumbers(ctx)
+		caseNumbers, err := m.fetchAllCaseNumbers(ctx, filter)
 		if err != nil {
 			return exportCompleteMsg{err: err}
 		}
@@ -1303,7 +1334,6 @@ func (m *Model) startBundleExport(outputDir string) tea.Cmd {
 			}
 		}
 
-		close(progressCh)
 		absPath, _ := filepath.Abs(outputDir)
 		return exportCompleteMsg{outputPath: absPath}
 	}
@@ -1561,9 +1591,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			if rowOffset >= 0 {
 				clickedIdx := m.caseList.GetOffset() + rowOffset
 				if clickedIdx >= 0 && clickedIdx < len(m.cases) {
-					caseNumber := m.cases[clickedIdx].CaseNumber
-					url := fmt.Sprintf("https://access.redhat.com/support/cases/#/case/%s", caseNumber)
-					return openURL(url)
+					return openURL(casePortalURL(m.cases[clickedIdx].CaseNumber))
 				}
 			}
 		}
@@ -1572,9 +1600,21 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	return nil
 }
 
+func casePortalURL(caseNumber string) string {
+	return fmt.Sprintf("https://access.redhat.com/support/cases/#/case/%s", caseNumber)
+}
+
 func openURL(url string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("xdg-open", url)
+		var cmd *exec.Cmd
+		switch runtime.GOOS {
+		case "darwin":
+			cmd = exec.Command("open", url)
+		case "windows":
+			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		default:
+			cmd = exec.Command("xdg-open", url)
+		}
 		cmd.Stdout = io.Discard
 		cmd.Stderr = io.Discard
 		if err := cmd.Start(); err != nil {
@@ -1602,6 +1642,12 @@ func (m *Model) waitExportProgress() tea.Cmd {
 	}
 }
 
+// Minimum terminal size for a usable layout
+const (
+	minTermWidth  = 40
+	minTermHeight = 10
+)
+
 // View implements tea.Model
 func (m *Model) View() string {
 	if !m.ready {
@@ -1612,13 +1658,19 @@ func (m *Model) View() string {
 		return "Loading..."
 	}
 
-	// Header with version and sort info (and debug if enabled)
+	if m.width < minTermWidth || m.height < minTermHeight {
+		msg := fmt.Sprintf("Terminal too small\nNeed at least %dx%d, have %dx%d",
+			minTermWidth, minTermHeight, m.width, m.height)
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, msg)
+	}
+
+	// Header with version (and debug if enabled); sort state is shown by the
+	// arrow in the case list column headers
 	versionText := ""
 	if m.opts.Version != "" {
 		versionText = " " + m.opts.Version
 	}
-	sortInfo := fmt.Sprintf(" [Sort: %s]", m.sortField.String())
-	headerText := "agcm" + versionText + m.styles.Muted.Render(sortInfo)
+	headerText := "agcm" + versionText
 	if m.layoutDebug != "" {
 		headerText += m.styles.Muted.Render(m.layoutDebug)
 	}
@@ -1887,6 +1939,27 @@ func ansiCut(s string, start, end int) string {
 	return result
 }
 
+// savePreset stores the current filter in the given preset slot
+func (m *Model) savePreset(slot string) {
+	if m.activeFilter == nil && len(m.opts.Accounts) == 0 {
+		m.statusBar.SetMessage(m.styles.Warning.Render("No filter active to save"), 2*time.Second)
+		return
+	}
+	preset := m.buildPresetFromCurrent()
+	m.configMgr.SetPreset(slot, preset)
+	if err := m.configMgr.Save(); err != nil {
+		m.statusBar.SetMessage(m.styles.Error.Render(fmt.Sprintf("Failed to save preset: %v", err)), 3*time.Second)
+		return
+	}
+	name := preset.Name
+	if name == "" {
+		name = "Preset " + slot
+	}
+	m.activePreset = slot
+	m.filterBar.SetPreset(slot, preset.Name)
+	m.statusBar.SetMessage(m.styles.Success.Render(fmt.Sprintf("Saved to preset %s: %s", slot, name)), 2*time.Second)
+}
+
 // buildPresetFromCurrent creates a FilterPreset from the current filter state
 func (m *Model) buildPresetFromCurrent() *config.FilterPreset {
 	preset := &config.FilterPreset{}
@@ -1922,11 +1995,7 @@ func (m *Model) buildPresetFromCurrent() *config.FilterPreset {
 	}
 	if len(preset.Products) > 0 {
 		if len(preset.Products) == 1 {
-			p := preset.Products[0]
-			if len(p) > 10 {
-				p = p[:10] + "..."
-			}
-			parts = append(parts, p)
+			parts = append(parts, runewidth.Truncate(preset.Products[0], 12, "…"))
 		} else {
 			parts = append(parts, fmt.Sprintf("%d Products", len(preset.Products)))
 		}
@@ -2019,8 +2088,9 @@ func (m *Model) renderHelp() string {
 		{"←/→", "Switch detail tabs"},
 		{"gg, G", "Go to top/bottom"},
 		{"PgUp/PgDn", "Page up/down"},
-		{"Tab", "Switch between list/detail"},
+		{"Tab, Enter", "Switch between list/detail"},
 		{"Esc", "Back to list"},
+		{"o", "Open case in browser"},
 		{"/", "Quick search by case number"},
 		{"f", "Filter dialog"},
 		{"F", "Clear filter"},

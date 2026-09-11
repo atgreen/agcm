@@ -120,15 +120,12 @@ func (s *StatusBar) View() string {
 		center = s.message
 	}
 
-	// Right: Connection status and time
-	var connStatus string
+	// Right: Connection status
 	if s.connected {
-		connStatus = s.styles.Success.Render("● connected")
+		right = s.styles.Success.Render("● connected")
 	} else {
-		connStatus = s.styles.Muted.Render("○ connecting...")
+		right = s.styles.Muted.Render("○ offline")
 	}
-	timeStr := time.Now().Format("15:04")
-	right = fmt.Sprintf("%s  %s", connStatus, s.styles.Muted.Render(timeStr))
 
 	// Calculate spacing
 	leftLen := len(stripAnsi(left))

@@ -120,7 +120,6 @@ func (q *QuickSearch) View() string {
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(q.styles.Header.GetBackground()).
-		Background(lipgloss.Color("248")).
 		Padding(1, 3).
 		Width(40)
 
