@@ -583,6 +583,26 @@ func (m *Model) toggleSortOrder() {
 	m.statusBar.SetMessage(fmt.Sprintf("Sort order: %s", order), 2*time.Second)
 }
 
+// mergeCases appends a fetched page, deduplicating by case number. The
+// server pages by row offset over a list it sorts by last-modified, so a
+// case modified between fetches shifts the rows and gets re-delivered on
+// the next page; the fresher copy replaces the one already loaded.
+func mergeCases(existing, page []api.Case) []api.Case {
+	index := make(map[string]int, len(existing))
+	for i, c := range existing {
+		index[c.CaseNumber] = i
+	}
+	for _, c := range page {
+		if i, ok := index[c.CaseNumber]; ok {
+			existing[i] = c
+			continue
+		}
+		index[c.CaseNumber] = len(existing)
+		existing = append(existing, c)
+	}
+	return existing
+}
+
 // checkHighlightChange checks if the highlighted case changed and triggers debounced fetch
 func (m *Model) checkHighlightChange() tea.Cmd {
 	selected := m.caseList.SelectedCase()
@@ -1122,10 +1142,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 			m.statusBar.SetConnected(false)
 			m.statusBar.SetMessage(m.styles.Error.Render("Error: "+msg.err.Error()), 5*time.Second)
+		} else if msg.append && msg.startIndex != len(m.cases) {
+			// Stale page: a refresh or filter change replaced the list while
+			// this fetch was in flight — drop it. maybeLoadMoreCases will
+			// re-request from the correct offset if still needed.
+			m.statusBar.SetConnected(true)
 		} else {
 			m.statusBar.SetConnected(true)
 			if msg.append {
-				m.cases = append(m.cases, msg.cases...)
+				m.cases = mergeCases(m.cases, msg.cases)
 			} else {
 				m.cases = msg.cases
 				m.initialLoadDone = true // First load complete

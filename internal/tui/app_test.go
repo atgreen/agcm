@@ -173,6 +173,97 @@ func TestSortCasesPreservesSelection(t *testing.T) {
 	}
 }
 
+func loadPage(t *testing.T, m *Model, msg casesLoadedMsg) *Model {
+	t.Helper()
+	updated, _ := m.Update(msg)
+	return updated.(*Model)
+}
+
+func pageCase(n string, mod time.Time) api.Case {
+	return api.Case{CaseNumber: n, Summary: "s", Status: "Open", Severity: "3 (Normal)", LastModified: mod}
+}
+
+// The server pages by row offset over a live list sorted by last-modified,
+// so a page can re-deliver a case already loaded (a modification between
+// fetches shifts every row down). The append must dedupe, keeping the
+// fresher copy.
+func TestAppendPageDeduplicates(t *testing.T) {
+	m := testModel()
+	m.width, m.height = 80, 24
+	m.ready = true
+	m.updateLayout()
+	now := time.Now()
+
+	m = loadPage(t, m, casesLoadedMsg{
+		cases: []api.Case{
+			pageCase("00000001", now),
+			pageCase("00000002", now.Add(-time.Hour)),
+			pageCase("00000003", now.Add(-2*time.Hour)),
+		},
+		totalCount: 5,
+	})
+
+	// Page 2 re-delivers 00000003 with a fresher timestamp
+	fresh := now.Add(time.Minute)
+	m = loadPage(t, m, casesLoadedMsg{
+		cases: []api.Case{
+			pageCase("00000003", fresh),
+			pageCase("00000004", now.Add(-3*time.Hour)),
+			pageCase("00000005", now.Add(-4*time.Hour)),
+		},
+		totalCount: 5,
+		startIndex: 3,
+		append:     true,
+	})
+
+	if len(m.cases) != 5 {
+		t.Fatalf("got %d cases, want 5 (duplicate not merged)", len(m.cases))
+	}
+	seen := map[string]int{}
+	for _, c := range m.cases {
+		seen[c.CaseNumber]++
+		if c.CaseNumber == "00000003" && !c.LastModified.Equal(fresh) {
+			t.Error("merge kept the stale copy of the re-delivered case")
+		}
+	}
+	for n, count := range seen {
+		if count > 1 {
+			t.Errorf("case %s appears %d times", n, count)
+		}
+	}
+}
+
+// An append whose start index no longer matches the list length is from
+// before a refresh or filter change and must be dropped, not appended.
+func TestStaleAppendDropped(t *testing.T) {
+	m := testModel()
+	m.width, m.height = 80, 24
+	m.ready = true
+	m.updateLayout()
+	now := time.Now()
+
+	m = loadPage(t, m, casesLoadedMsg{
+		cases:      []api.Case{pageCase("00000001", now), pageCase("00000002", now)},
+		totalCount: 2,
+	})
+
+	m = loadPage(t, m, casesLoadedMsg{
+		cases:      []api.Case{pageCase("00000009", now)},
+		totalCount: 200,
+		startIndex: 100,
+		append:     true,
+	})
+
+	if len(m.cases) != 2 {
+		t.Fatalf("stale append changed the list: got %d cases, want 2", len(m.cases))
+	}
+	for _, c := range m.cases {
+		if c.CaseNumber == "00000009" {
+			t.Error("stale page's case was appended")
+		}
+	}
+}
+
 // Pressing t must advance through every theme and wrap back to the start,
 // re-skinning the shared styles as it goes.
 func TestCycleTheme(t *testing.T) {
