@@ -27,6 +27,7 @@ type KeyMap struct {
 	SortOrder    key.Binding
 	Refresh      key.Binding
 	Theme        key.Binding
+	About        key.Binding
 	Help         key.Binding
 	Quit         key.Binding
 	Open         key.Binding
@@ -125,6 +126,10 @@ func DefaultKeyMap() *KeyMap {
 			key.WithKeys("t"),
 			key.WithHelp("t", "cycle theme"),
 		),
+		About: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "about"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -179,6 +184,6 @@ func (k *KeyMap) FullHelp() [][]key.Binding {
 		{k.TextSearch, k.PresetLoad, k.PresetSave},
 		{k.NextComment, k.PrevComment, k.Sort, k.SortOrder},
 		{k.Refresh, k.Export, k.BulkExport, k.BundleExport},
-		{k.Theme, k.Help, k.Quit},
+		{k.Theme, k.About, k.Help, k.Quit},
 	}
 }

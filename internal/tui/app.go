@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/green/agcm/internal/about"
 	"github.com/green/agcm/internal/api"
 	"github.com/green/agcm/internal/config"
 	"github.com/green/agcm/internal/export"
@@ -98,6 +99,7 @@ type Model struct {
 	// State
 	currentPane      Pane
 	showHelp         bool
+	showAbout        bool
 	cases            []api.Case
 	sortField        SortField
 	sortReverse      bool
@@ -853,9 +855,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-		// Any key dismisses help screen
-		if m.showHelp {
+		// Any key dismisses help screen or About box
+		if m.showHelp || m.showAbout {
 			m.showHelp = false
+			m.showAbout = false
 			return m, nil
 		}
 
@@ -873,6 +876,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if key.Matches(msg, m.keys.Help) {
 			m.showHelp = true
+			return m, nil
+		}
+
+		// About box (a)
+		if key.Matches(msg, m.keys.About) {
+			m.showAbout = true
 			return m, nil
 		}
 
@@ -1785,6 +1794,11 @@ func (m *Model) View() string {
 		view = overlayCenter(view, m.modal.View(), m.width, m.height)
 	}
 
+	// About box overlay
+	if m.showAbout {
+		view = overlayCenter(view, m.renderAbout(), m.width, m.height)
+	}
+
 	// Text search bar overlay (bottom of screen)
 	if m.textSearchMode && m.textSearch.IsVisible() {
 		view = overlayBottom(view, m.textSearch.View(), m.width, m.height)
@@ -2138,6 +2152,38 @@ func (m *Model) renderLoadingBox() string {
 		Padding(1, 3)
 
 	return boxStyle.Render(spinnerText)
+}
+
+// renderAbout renders the About box overlay
+func (m *Model) renderAbout() string {
+	version := m.opts.Version
+	if version == "" {
+		version = "dev"
+	}
+
+	var sb strings.Builder
+	sb.WriteString(m.styles.Title.Render("agcm " + version))
+	sb.WriteString("\n")
+	sb.WriteString(m.styles.Muted.Render("A TUI for the Red Hat Support Portal"))
+	sb.WriteString("\n\n")
+	sb.WriteString(m.styles.Label.Render("Author:   ") + m.styles.Value.Render(about.Author) + "\n")
+	sb.WriteString(m.styles.Label.Render("License:  ") + m.styles.Value.Render(about.License) + "\n")
+	sb.WriteString(m.styles.Label.Render("Homepage: ") + m.styles.Subtitle.Render(about.Homepage) + "\n\n")
+	sb.WriteString(m.styles.Value.Render("Please report bugs and feature requests at:") + "\n")
+	sb.WriteString("  " + m.styles.Subtitle.Render(about.Issues) + "\n\n")
+	sb.WriteString(m.styles.Muted.Render("Press any key to close"))
+
+	// Cap the box so it fits even at the minimum terminal width
+	boxWidth := 52
+	if boxWidth > m.width-4 {
+		boxWidth = m.width - 4
+	}
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.styles.Header.GetBackground()).
+		Padding(1, 3).
+		Width(boxWidth).
+		Render(sb.String())
 }
 
 // renderHelp renders the help screen from the KeyMap so it can't drift from

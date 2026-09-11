@@ -210,6 +210,7 @@ The debug log path can also be set in `config.yaml` via `debug.log_file`.
 | `S` | Toggle sort order |
 | `r` | Refresh |
 | `t` | Cycle color theme (dark, light, dracula, solarized, mono) |
+| `a` | About (author, license, issue tracker) |
 | `e` | Export current case |
 | `E` | Export all cases |
 | `B` | Bundle export (4MB markdown files) |

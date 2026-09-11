@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/green/agcm/internal/about"
 	"github.com/green/agcm/internal/api"
 	"github.com/green/agcm/internal/auth"
 	"github.com/green/agcm/internal/config"
@@ -103,6 +104,9 @@ func Execute() {
 }
 
 func init() {
+	// Append author/license/homepage and the issue tracker to help output
+	rootCmd.SetHelpTemplate(rootCmd.HelpTemplate() + about.HelpFooter)
+
 	// Determine config directory
 	defaultCfgDir, err := config.DefaultConfigDir()
 	if err != nil {

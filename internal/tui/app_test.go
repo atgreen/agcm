@@ -83,6 +83,34 @@ func TestViewFrameSizes(t *testing.T) {
 
 		m.showHelp = true
 		assertFrame(t, m.View(), size.w, size.h, label+" help")
+
+		m.showHelp = false
+		m.showAbout = true
+		assertFrame(t, m.View(), size.w, size.h, label+" about")
+	}
+}
+
+// The About box must show attribution and the issue tracker, and any key
+// must dismiss it.
+func TestAboutBox(t *testing.T) {
+	m := frameModel(80, 24)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	m = updated.(*Model)
+	if !m.showAbout {
+		t.Fatal("pressing a did not open the About box")
+	}
+	view := m.View()
+	for _, want := range []string{"GPL-3.0-or-later", "github.com/atgreen/agcm/issues", "Anthony Green"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("About view missing %q", want)
+		}
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m = updated.(*Model)
+	if m.showAbout {
+		t.Error("About box not dismissed by a keypress")
 	}
 }
 
