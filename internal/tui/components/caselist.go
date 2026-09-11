@@ -319,11 +319,7 @@ func (c *CaseList) View() string {
 		style = c.styles.Focused
 	}
 
-	// Calculate available width for content (minus border + scrollbar)
-	contentWidth := c.width - 5
-	if contentWidth < 20 {
-		contentWidth = 20
-	}
+	contentWidth := c.contentWidth()
 
 	// Build header
 	header := c.renderHeader(contentWidth)
@@ -381,13 +377,72 @@ func (c *CaseList) View() string {
 		Render(content)
 }
 
-// Column widths (fixed)
+// Column widths. STATUS shrinks on narrow terminals so SUMMARY keeps room.
 const (
-	colCase   = 10
-	colDate   = 12
-	colStatus = 20
-	colSev    = 4
+	colCase         = 10
+	colDate         = 12
+	colStatus       = 20
+	colStatusNarrow = 12
+	colSev          = 4
+
+	// Below this content width the STATUS column uses colStatusNarrow
+	narrowContentWidth = 75
 )
+
+// statusColFor returns the STATUS column width for a given content width
+func statusColFor(contentWidth int) int {
+	if contentWidth < narrowContentWidth {
+		return colStatusNarrow
+	}
+	return colStatus
+}
+
+// HeaderColumn identifies a case-list header column, for mouse hit-testing
+type HeaderColumn int
+
+const (
+	HeaderColNone HeaderColumn = iota
+	HeaderColCase
+	HeaderColDate
+	HeaderColSev
+	HeaderColStatus
+	HeaderColSummary
+)
+
+// HeaderColumnAt maps a content-relative x position to the header column
+// under it, derived from the same widths the renderer uses.
+func (c *CaseList) HeaderColumnAt(x int) HeaderColumn {
+	contentWidth := c.contentWidth()
+	pos := 0
+	for _, col := range []struct {
+		width int
+		id    HeaderColumn
+	}{
+		{colCase, HeaderColCase},
+		{colDate, HeaderColDate},
+		{colSev, HeaderColSev},
+		{statusColFor(contentWidth), HeaderColStatus},
+	} {
+		if x >= pos && x < pos+col.width {
+			return col.id
+		}
+		pos += col.width + 1 // +1 for the separating space
+	}
+	if x >= pos && x < contentWidth {
+		return HeaderColSummary
+	}
+	return HeaderColNone
+}
+
+// contentWidth returns the width available for row content
+// (component width minus border and scrollbar)
+func (c *CaseList) contentWidth() int {
+	w := c.width - 5
+	if w < 20 {
+		w = 20
+	}
+	return w
+}
 
 func (c *CaseList) renderHeader(width int) string {
 	// Sort arrow
@@ -422,7 +477,7 @@ func (c *CaseList) renderHeader(width int) string {
 		sevHdr = c.styles.Label.Render(padRight("SEV", colSev))
 	}
 
-	statusHdr = c.styles.Label.Render(padRight("STATUS", colStatus))
+	statusHdr = c.styles.Label.Render(padRight("STATUS", statusColFor(width)))
 	summaryHdr := c.styles.Label.Render("SUMMARY")
 
 	return caseHdr + " " + modHdr + " " + sevHdr + " " + statusHdr + " " + summaryHdr
@@ -561,10 +616,11 @@ func (c *CaseList) renderRow(cs *api.Case, width int, selected bool) string {
 		sev = string(sev[0])
 	}
 
-	status := runewidth.Truncate(cs.Status, colStatus, "…")
+	statusCol := statusColFor(width)
+	status := runewidth.Truncate(cs.Status, statusCol, "…")
 
 	// Calculate remaining width for summary
-	descWidth := width - colCase - colDate - colStatus - colSev - 4
+	descWidth := width - colCase - colDate - statusCol - colSev - 4
 	if descWidth < 10 {
 		descWidth = 10
 	}
@@ -578,14 +634,14 @@ func (c *CaseList) renderRow(cs *api.Case, width int, selected bool) string {
 
 	if selected {
 		row := padRight(cs.CaseNumber, colCase) + " " + padRight(dateStr, colDate) + " " +
-			padRight(sev, colSev) + " " + padRight(status, colStatus) + " " + summary
+			padRight(sev, colSev) + " " + padRight(status, statusCol) + " " + summary
 		return c.styles.ListItemSelected.Width(width).Render(row)
 	}
 
 	// Apply severity color to the severity column only
 	caseNum := c.styles.CaseNumber.Render(padRight(cs.CaseNumber, colCase))
 	sevStr := c.styles.SeverityStyle(cs.Severity).Render(padRight(sev, colSev))
-	statusStr := c.styles.StatusStyle(cs.Status).Render(padRight(status, colStatus))
+	statusStr := c.styles.StatusStyle(cs.Status).Render(padRight(status, statusCol))
 
 	return caseNum + " " + padRight(dateStr, colDate) + " " + sevStr + " " + statusStr + " " + summary
 }

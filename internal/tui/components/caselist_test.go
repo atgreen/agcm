@@ -65,6 +65,66 @@ func TestRenderRowStatusColumn(t *testing.T) {
 	}
 }
 
+// Header hit-testing must agree with the rendered column layout at both
+// wide and narrow widths.
+func TestHeaderColumnAt(t *testing.T) {
+	c := testCaseList()
+
+	c.SetSize(85, 10) // contentWidth 80, STATUS at full 20
+	wide := map[int]HeaderColumn{
+		0:  HeaderColCase,
+		9:  HeaderColCase,
+		10: HeaderColNone, // separator space
+		11: HeaderColDate,
+		22: HeaderColDate,
+		24: HeaderColSev,
+		29: HeaderColStatus,
+		48: HeaderColStatus,
+		50: HeaderColSummary,
+		79: HeaderColSummary,
+		80: HeaderColNone,
+	}
+	for x, want := range wide {
+		if got := c.HeaderColumnAt(x); got != want {
+			t.Errorf("wide: HeaderColumnAt(%d) = %v, want %v", x, got, want)
+		}
+	}
+
+	c.SetSize(60, 10) // contentWidth 55, STATUS shrinks to 12
+	narrow := map[int]HeaderColumn{
+		29: HeaderColStatus,
+		40: HeaderColStatus,
+		42: HeaderColSummary,
+		54: HeaderColSummary,
+		55: HeaderColNone,
+	}
+	for x, want := range narrow {
+		if got := c.HeaderColumnAt(x); got != want {
+			t.Errorf("narrow: HeaderColumnAt(%d) = %v, want %v", x, got, want)
+		}
+	}
+}
+
+// On narrow terminals the STATUS column shrinks so SUMMARY keeps room.
+func TestNarrowWidthKeepsSummaryRoom(t *testing.T) {
+	c := testCaseList()
+	c.SetSize(60, 10)
+	cs := &api.Case{
+		CaseNumber:   "00000001",
+		Summary:      "kernel panic on boot after upgrade",
+		Status:       "Waiting on Red Hat",
+		Severity:     "2 (High)",
+		LastModified: time.Now(),
+	}
+	row := c.renderRow(cs, 55, false)
+	if w := lipgloss.Width(row); w > 55 {
+		t.Errorf("narrow row width = %d, want <= 55", w)
+	}
+	if !strings.Contains(row, "kernel panic") {
+		t.Errorf("summary crushed out of narrow row: %q", row)
+	}
+}
+
 // The date column must follow the sort field so the header stays honest.
 func TestRenderRowDateFollowsSortField(t *testing.T) {
 	c := testCaseList()

@@ -1465,20 +1465,19 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			return nil
 		}
 
-		// Click on column headers in case list
+		// Click on column headers in case list; hit-testing is derived from
+		// the same column widths the list renders with
 		if msg.Y == listHeaderY {
-			// Column positions: CASE(0-10), MODIFIED(11-23), SEV(24-28), STATUS(29-49), SUMMARY(50+)
-			x := msg.X - 1 // Account for border
-			if x >= 0 && x < 10 {
-				// CASE column - sort by case number
+			switch m.caseList.HeaderColumnAt(msg.X - 1) { // -1 for border
+			case components.HeaderColCase:
 				if m.sortField == SortByCaseNumber {
 					m.toggleSortOrder()
 				} else {
 					m.sortField = SortByCaseNumber
 					m.sortCases()
 				}
-			} else if x >= 11 && x < 24 {
-				// MODIFIED column - toggle between LastModified and Created
+			case components.HeaderColDate:
+				// Toggle between LastModified and Created
 				switch m.sortField {
 				case SortByLastModified:
 					m.sortField = SortByCreated
@@ -1489,8 +1488,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 					m.sortField = SortByLastModified
 					m.sortCases()
 				}
-			} else if x >= 24 && x < 29 {
-				// SEV column - sort by severity
+			case components.HeaderColSev:
 				if m.sortField == SortBySeverity {
 					m.toggleSortOrder()
 				} else {
