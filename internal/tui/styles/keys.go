@@ -6,28 +6,35 @@ import "github.com/charmbracelet/bubbles/key"
 
 // KeyMap defines all keyboard shortcuts
 type KeyMap struct {
-	Up         key.Binding
-	Down       key.Binding
-	Left       key.Binding
-	Right      key.Binding
-	Top        key.Binding
-	Bottom     key.Binding
-	PageUp     key.Binding
-	PageDown   key.Binding
-	Select     key.Binding
-	Back       key.Binding
-	Tab        key.Binding
-	ShiftTab   key.Binding
-	Search     key.Binding
-	Filter     key.Binding
-	Sort       key.Binding
-	Refresh    key.Binding
-	Help       key.Binding
-	Quit       key.Binding
-	Open       key.Binding
-	Export     key.Binding
-	BulkExport key.Binding
-	TextSearch key.Binding
+	Up           key.Binding
+	Down         key.Binding
+	Left         key.Binding
+	Right        key.Binding
+	Top          key.Binding
+	Bottom       key.Binding
+	PageUp       key.Binding
+	PageDown     key.Binding
+	Select       key.Binding
+	Back         key.Binding
+	Tab          key.Binding
+	ShiftTab     key.Binding
+	Search       key.Binding
+	Filter       key.Binding
+	ClearFilter  key.Binding
+	PresetLoad   key.Binding
+	PresetSave   key.Binding
+	Sort         key.Binding
+	SortOrder    key.Binding
+	Refresh      key.Binding
+	Help         key.Binding
+	Quit         key.Binding
+	Open         key.Binding
+	Export       key.Binding
+	BulkExport   key.Binding
+	BundleExport key.Binding
+	TextSearch   key.Binding
+	NextComment  key.Binding
+	PrevComment  key.Binding
 }
 
 // DefaultKeyMap returns the default key bindings
@@ -43,11 +50,11 @@ func DefaultKeyMap() *KeyMap {
 		),
 		Left: key.NewBinding(
 			key.WithKeys("left", "h"),
-			key.WithHelp("←/h", "left"),
+			key.WithHelp("←/h", "prev detail tab"),
 		),
 		Right: key.NewBinding(
 			key.WithKeys("right", "l"),
-			key.WithHelp("→/l", "right"),
+			key.WithHelp("→/l", "next detail tab"),
 		),
 		Top: key.NewBinding(
 			key.WithKeys("g"),
@@ -67,15 +74,15 @@ func DefaultKeyMap() *KeyMap {
 		),
 		Select: key.NewBinding(
 			key.WithKeys("enter"),
-			key.WithHelp("enter", "select"),
+			key.WithHelp("enter", "focus detail"),
 		),
 		Back: key.NewBinding(
 			key.WithKeys("esc", "backspace"),
-			key.WithHelp("esc", "back"),
+			key.WithHelp("esc", "back to list"),
 		),
 		Tab: key.NewBinding(
 			key.WithKeys("tab"),
-			key.WithHelp("tab", "next pane"),
+			key.WithHelp("tab", "switch pane"),
 		),
 		ShiftTab: key.NewBinding(
 			key.WithKeys("shift+tab"),
@@ -89,9 +96,25 @@ func DefaultKeyMap() *KeyMap {
 			key.WithKeys("f"),
 			key.WithHelp("f", "filter"),
 		),
+		ClearFilter: key.NewBinding(
+			key.WithKeys("F"),
+			key.WithHelp("F", "clear filter"),
+		),
+		PresetLoad: key.NewBinding(
+			key.WithKeys("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
+			key.WithHelp("1-9, 0", "load filter preset"),
+		),
+		PresetSave: key.NewBinding(
+			key.WithKeys("ctrl+s"),
+			key.WithHelp("ctrl+s + #", "save filter preset"),
+		),
 		Sort: key.NewBinding(
 			key.WithKeys("s"),
-			key.WithHelp("s", "sort"),
+			key.WithHelp("s", "cycle sort field"),
+		),
+		SortOrder: key.NewBinding(
+			key.WithKeys("S"),
+			key.WithHelp("S", "toggle sort order"),
 		),
 		Refresh: key.NewBinding(
 			key.WithKeys("r"),
@@ -115,27 +138,42 @@ func DefaultKeyMap() *KeyMap {
 		),
 		BulkExport: key.NewBinding(
 			key.WithKeys("E"),
-			key.WithHelp("E", "bulk export"),
+			key.WithHelp("E", "export all cases"),
+		),
+		BundleExport: key.NewBinding(
+			key.WithKeys("B"),
+			key.WithHelp("B", "bundle export (4MB files)"),
 		),
 		TextSearch: key.NewBinding(
 			key.WithKeys("ctrl+f"),
 			key.WithHelp("ctrl+f", "find in case"),
 		),
+		NextComment: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "next comment"),
+		),
+		PrevComment: key.NewBinding(
+			key.WithKeys("p"),
+			key.WithHelp("p", "prev comment"),
+		),
 	}
 }
 
-// ShortHelp returns the short help text
+// ShortHelp returns the bindings shown in the status bar
 func (k *KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Search, k.Filter, k.Help, k.Quit}
+	return []key.Binding{k.Search, k.Filter, k.Sort, k.Help, k.Quit}
 }
 
-// FullHelp returns the full help text
+// FullHelp returns the bindings shown on the help screen, in display order
 func (k *KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.Top, k.Bottom},
-		{k.PageUp, k.PageDown, k.Tab, k.ShiftTab},
-		{k.Select, k.Back, k.Search, k.Filter},
-		{k.Sort, k.Refresh, k.Open},
-		{k.Export, k.BulkExport, k.Help, k.Quit},
+		{k.Up, k.Down, k.Left, k.Right},
+		{k.Top, k.Bottom, k.PageUp, k.PageDown},
+		{k.Tab, k.ShiftTab, k.Select, k.Back},
+		{k.Open, k.Search, k.Filter, k.ClearFilter},
+		{k.TextSearch, k.PresetLoad, k.PresetSave},
+		{k.NextComment, k.PrevComment, k.Sort, k.SortOrder},
+		{k.Refresh, k.Export, k.BulkExport, k.BundleExport},
+		{k.Help, k.Quit},
 	}
 }

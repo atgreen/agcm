@@ -16,6 +16,7 @@ import (
 // StatusBar displays status information at the bottom of the screen
 type StatusBar struct {
 	styles     *styles.Styles
+	keys       *styles.KeyMap
 	width      int
 	connected  bool
 	message    string
@@ -25,14 +26,16 @@ type StatusBar struct {
 	spinner    spinner.Model
 }
 
-// NewStatusBar creates a new status bar component
-func NewStatusBar(s *styles.Styles) *StatusBar {
+// NewStatusBar creates a new status bar component; the shortcut hints are
+// rendered from the KeyMap's ShortHelp so they can't drift from the bindings
+func NewStatusBar(s *styles.Styles, keys *styles.KeyMap) *StatusBar {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(s.Warning.GetForeground())
 
 	return &StatusBar{
 		styles:    s,
+		keys:      keys,
 		connected: false,
 		spinner:   sp,
 	}
@@ -94,22 +97,13 @@ func (s *StatusBar) Update(msg tea.Msg) (*StatusBar, tea.Cmd) {
 func (s *StatusBar) View() string {
 	var left, center, right string
 
-	// Left: Help shortcuts (updated for current keybindings)
-	shortcuts := []struct {
-		key  string
-		desc string
-	}{
-		{"s", "Sort"},
-		{"r", "Refresh"},
-		{"?", "Help"},
-		{"q", "Quit"},
-	}
-
+	// Left: shortcut hints from the keymap
 	var parts []string
-	for _, sc := range shortcuts {
+	for _, b := range s.keys.ShortHelp() {
+		h := b.Help()
 		parts = append(parts, fmt.Sprintf("%s %s",
-			s.styles.HelpKey.Render("["+sc.key+"]"),
-			s.styles.HelpDesc.Render(sc.desc)))
+			s.styles.HelpKey.Render("["+h.Key+"]"),
+			s.styles.HelpDesc.Render(h.Desc)))
 	}
 	left = strings.Join(parts, "  ")
 

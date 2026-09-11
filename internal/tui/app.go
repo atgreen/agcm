@@ -220,7 +220,7 @@ func NewModel(client *api.Client, opts Options, configMgr *config.Manager) *Mode
 		keys:         keys,
 		caseList:     caseList,
 		caseDetail:   caseDetail,
-		statusBar:    components.NewStatusBar(s),
+		statusBar:    components.NewStatusBar(s, keys),
 		spinner:      sp,
 		modal:        components.NewModal(s),
 		filePicker:   components.NewFilePickerDialog(s),
@@ -872,7 +872,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Clear filter (F)
-		if msg.String() == "F" && (m.activeFilter != nil || m.activePreset != "") {
+		if key.Matches(msg, m.keys.ClearFilter) && (m.activeFilter != nil || m.activePreset != "") {
 			m.activeFilter = nil
 			m.activePreset = ""
 			m.filterBar.Clear()
@@ -887,14 +887,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Preset save mode (Ctrl+s)
-		if msg.String() == "ctrl+s" {
+		if key.Matches(msg, m.keys.PresetSave) {
 			m.presetSaveMode = true
 			m.statusBar.SetMessage(m.styles.Label.Render("Press 1-9 or 0 to save current filter to preset slot..."), 5*time.Second)
 			return m, nil
 		}
 
 		// Handle digit keys for loading presets (1-9, 0)
-		if len(msg.String()) == 1 && msg.String() >= "0" && msg.String() <= "9" {
+		if key.Matches(msg, m.keys.PresetLoad) {
 			slot := msg.String()
 			preset := m.configMgr.GetPreset(slot)
 			if preset == nil {
@@ -930,7 +930,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cycleSortField()
 			return m, nil
 		}
-		if msg.String() == "S" {
+		if key.Matches(msg, m.keys.SortOrder) {
 			m.toggleSortOrder()
 			return m, nil
 		}
@@ -961,7 +961,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Export all cases (E)
-		if msg.String() == "E" {
+		if key.Matches(msg, m.keys.BulkExport) {
 			if len(m.cases) > 0 {
 				m.pendingExport = "bulk"
 				cmd := m.filePicker.Show(
@@ -984,7 +984,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Bundle export (B) - export to bundled markdown files
-		if msg.String() == "B" {
+		if key.Matches(msg, m.keys.BundleExport) {
 			if len(m.cases) > 0 {
 				m.pendingExport = "bundle"
 				cmd := m.filePicker.Show(
@@ -1017,7 +1017,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 		// Global next/previous comment shortcuts (only in Comments tab)
-		if (msg.String() == "n" || msg.String() == "p") && m.caseDetail.ActiveTab() == 1 {
+		if (key.Matches(msg, m.keys.NextComment) || key.Matches(msg, m.keys.PrevComment)) && m.caseDetail.ActiveTab() == 1 {
 			caseDetail, cmd := m.caseDetail.Update(msg)
 			m.caseDetail = caseDetail
 			cmds = append(cmds, cmd)
@@ -2100,48 +2100,49 @@ func (m *Model) renderLoadingBox() string {
 	return boxStyle.Render(spinnerText)
 }
 
+// renderHelp renders the help screen from the KeyMap so it can't drift from
+// the actual bindings; mouse actions are appended as extra rows.
 func (m *Model) renderHelp() string {
-	var sb string
+	type entry struct{ key, desc string }
+	var entries []entry
+	for _, group := range m.keys.FullHelp() {
+		for _, b := range group {
+			h := b.Help()
+			entries = append(entries, entry{h.Key, h.Desc})
+		}
+	}
+	entries = append(entries,
+		entry{"Right-click", "open case in browser"},
+		entry{"Click link", "open URL"},
+	)
 
-	help := []struct {
-		key  string
-		desc string
-	}{
-		{"↑/k, ↓/j", "Navigate up/down"},
-		{"←/→", "Switch detail tabs"},
-		{"gg, G", "Go to top/bottom"},
-		{"PgUp/PgDn", "Page up/down"},
-		{"Tab, Enter", "Switch between list/detail"},
-		{"Esc", "Back to list"},
-		{"o", "Open case in browser"},
-		{"/", "Quick search by case number"},
-		{"f", "Filter dialog"},
-		{"F", "Clear filter"},
-		{"1-9, 0", "Load filter preset"},
-		{"ctrl+s + #", "Save filter to preset slot"},
-		{"ctrl+f", "Search within case"},
-		{"n, p", "Next/prev comment (Comments tab)"},
-		{"s", "Cycle sort field"},
-		{"S", "Toggle sort order"},
-		{"r", "Refresh"},
-		{"e", "Export current case"},
-		{"E", "Export all cases"},
-		{"B", "Bundle export (4MB files)"},
-		{"Right-click", "Open case in browser"},
-		{"Click link", "Open URL"},
-		{"?", "Toggle help"},
-		{"q", "Quit"},
+	renderEntry := func(e entry) string {
+		return m.styles.HelpKey.Render(fmt.Sprintf("%-12s", e.key)) + " " +
+			m.styles.HelpDesc.Render(e.desc)
+	}
+	pad := func(s string, w int) string {
+		if d := w - lipgloss.Width(s); d > 0 {
+			return s + strings.Repeat(" ", d)
+		}
+		return s
 	}
 
-	sb = m.styles.Title.Render("Keyboard Shortcuts")
+	// Two columns when the terminal is wide enough
+	cols := 1
+	if m.width >= 84 {
+		cols = 2
+	}
+	rows := (len(entries) + cols - 1) / cols
+
+	sb := m.styles.Title.Render("Keyboard Shortcuts")
 	sb += "\n\n"
-
-	for _, h := range help {
-		sb += fmt.Sprintf("%s  %s\n",
-			m.styles.HelpKey.Render(fmt.Sprintf("%-15s", h.key)),
-			m.styles.HelpDesc.Render(h.desc))
+	for r := 0; r < rows; r++ {
+		line := renderEntry(entries[r])
+		if cols == 2 && r+rows < len(entries) {
+			line = pad(line, 40) + renderEntry(entries[r+rows])
+		}
+		sb += line + "\n"
 	}
-
 	sb += "\n" + m.styles.Muted.Render("Press any key to close")
 
 	return m.styles.Border.
