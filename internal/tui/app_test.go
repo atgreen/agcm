@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,35 @@ func TestNormalizeCaseNumber(t *testing.T) {
 
 func testModel() *Model {
 	return NewModel(nil, Options{}, nil)
+}
+
+func TestAnsiCutPreservesEscapes(t *testing.T) {
+	link := "\x1b]8;;https://example.com\x1b\\text\x1b]8;;\x1b\\"
+	csi := "\x1b[31mred\x1b[0m"
+
+	// A cut that keeps the region must keep the OSC-8 open/close pair
+	got := ansiCut(link+"tail", 0, 4)
+	if !strings.Contains(got, "\x1b]8;;https://example.com\x1b\\") {
+		t.Errorf("OSC-8 open sequence lost: %q", got)
+	}
+	if !strings.Contains(got, "text") {
+		t.Errorf("visible text lost: %q", got)
+	}
+
+	// CSI sequences inside the window survive; visible width is respected
+	got = ansiCut(csi, 0, 3)
+	if !strings.Contains(got, "\x1b[31m") || !strings.Contains(got, "red") {
+		t.Errorf("CSI cut broken: %q", got)
+	}
+
+	// A double-width rune straddling the boundary is dropped, not split
+	got = ansiCut("ab漢cd", 0, 3)
+	if strings.ContainsRune(got, '漢') {
+		t.Errorf("straddling wide rune should be dropped: %q", got)
+	}
+	if got != "ab" {
+		t.Errorf("ansiCut(ab漢cd, 0, 3) = %q, want %q", got, "ab")
+	}
 }
 
 func TestSortCasesPreservesSelection(t *testing.T) {

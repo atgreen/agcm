@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -1903,40 +1904,62 @@ func trimTrailingNewlines(s string) string {
 	return strings.TrimRight(s, "\n")
 }
 
-// ansiCut cuts a string with ANSI codes at the given visual positions
+// ansiCut cuts a string at the given visual positions, keeping CSI and OSC
+// escape sequences intact so styling and OSC-8 hyperlinks survive the cut.
 func ansiCut(s string, start, end int) string {
-	// Simple implementation - for complex ANSI, use lipgloss or ansi package
-	result := ""
+	var result strings.Builder
 	visualPos := 0
-	inEscape := false
 
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-			if visualPos >= start && visualPos < end {
-				result += string(r)
+	for i := 0; i < len(s); {
+		if s[i] == 0x1b {
+			seqEnd := i + 1
+			if i+1 < len(s) && s[i+1] == '[' {
+				// CSI sequence: ESC [ ... final byte (0x40-0x7E)
+				seqEnd = i + 2
+				for seqEnd < len(s) && (s[seqEnd] < 0x40 || s[seqEnd] > 0x7e) {
+					seqEnd++
+				}
+				if seqEnd < len(s) {
+					seqEnd++
+				}
+			} else if i+1 < len(s) && s[i+1] == ']' {
+				// OSC sequence: ESC ] ... BEL or ST (ESC \)
+				seqEnd = i + 2
+				for seqEnd < len(s) {
+					if s[seqEnd] == 0x07 {
+						seqEnd++
+						break
+					}
+					if s[seqEnd] == 0x1b && seqEnd+1 < len(s) && s[seqEnd+1] == '\\' {
+						seqEnd += 2
+						break
+					}
+					seqEnd++
+				}
+			} else if i+1 < len(s) {
+				seqEnd = i + 2
 			}
+			if visualPos >= start && visualPos < end {
+				result.WriteString(s[i:seqEnd])
+			}
+			i = seqEnd
 			continue
 		}
-		if inEscape {
-			if visualPos >= start && visualPos < end {
-				result += string(r)
-			}
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-				inEscape = false
-			}
-			continue
-		}
 
-		if visualPos >= start && visualPos < end {
-			result += string(r)
+		r, size := utf8.DecodeRuneInString(s[i:])
+		w := runewidth.RuneWidth(r)
+		// Keep a rune only if it fits entirely inside the window, so a
+		// double-width rune straddling the boundary is dropped, not split
+		if visualPos >= start && visualPos+w <= end {
+			result.WriteString(s[i : i+size])
 		}
-		visualPos++
+		visualPos += w
+		i += size
 		if visualPos >= end {
 			break
 		}
 	}
-	return result
+	return result.String()
 }
 
 // savePreset stores the current filter in the given preset slot
