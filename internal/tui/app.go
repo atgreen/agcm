@@ -137,6 +137,9 @@ type Model struct {
 	presetSaveMode bool   // True when waiting for digit to save preset
 	activePreset   string // Currently active preset slot (empty if none)
 
+	// Theme
+	themeIndex int // Index into styles.Themes()
+
 	// Text search within case
 	textSearch     *components.TextSearch
 	textSearchMode bool
@@ -200,7 +203,7 @@ const casePageSize = 100
 
 // NewModel creates a new TUI model
 func NewModel(client *api.Client, opts Options, configMgr *config.Manager) *Model {
-	s := styles.DefaultStyles()
+	s, themeIndex := initialStyles(configMgr)
 	keys := styles.DefaultKeyMap()
 
 	sp := spinner.New()
@@ -231,8 +234,41 @@ func NewModel(client *api.Client, opts Options, configMgr *config.Manager) *Mode
 		currentPane:  PaneList,
 		sortField:    SortByLastModified,
 		sortReverse:  true,
+		themeIndex:   themeIndex,
 		detailCache:  make(map[string]*CachedCaseDetail),
 	}
+}
+
+// initialStyles picks the startup theme: the configured ui.theme when it
+// names a known theme, otherwise auto-detection from the terminal background
+func initialStyles(configMgr *config.Manager) (*styles.Styles, int) {
+	if configMgr != nil {
+		if idx := styles.ThemeIndex(configMgr.GetTheme()); idx >= 0 {
+			return styles.NewStyles(styles.Themes()[idx].Colors), idx
+		}
+	}
+	if lipgloss.HasDarkBackground() {
+		return styles.DarkStyles(), styles.ThemeIndex("dark")
+	}
+	return styles.LightStyles(), styles.ThemeIndex("light")
+}
+
+// cycleTheme switches to the next theme, re-skins the UI in place, and
+// persists the choice to the config file
+func (m *Model) cycleTheme() {
+	themes := styles.Themes()
+	m.themeIndex = (m.themeIndex + 1) % len(themes)
+	theme := themes[m.themeIndex]
+	m.styles.Apply(theme.Colors)
+
+	msg := "Theme: " + theme.Name
+	if m.configMgr != nil {
+		m.configMgr.Get().UI.Theme = theme.Name
+		if err := m.configMgr.Save(); err != nil {
+			msg += " (failed to save: " + err.Error() + ")"
+		}
+	}
+	m.statusBar.SetMessage(m.styles.Label.Render(msg), 2*time.Second)
 }
 
 // Init implements tea.Model
@@ -851,6 +887,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loadingCases = true
 			m.detailCache = make(map[string]*CachedCaseDetail) // Clear cache
 			return m, tea.Batch(m.loadCasesPage(0, false), m.spinner.Tick)
+		}
+
+		// Cycle color theme (t)
+		if key.Matches(msg, m.keys.Theme) {
+			m.cycleTheme()
+			return m, nil
 		}
 
 		// Quick search by case number (/)

@@ -67,7 +67,9 @@ func DefaultConfig() *Config {
 			Timeout: 30 * time.Second,
 		},
 		UI: UIConfig{
-			Theme:    "dark",
+			// "auto" picks dark or light from the terminal background;
+			// any name from the TUI theme list (t key) pins a theme
+			Theme:    "auto",
 			PageSize: 25,
 		},
 	}

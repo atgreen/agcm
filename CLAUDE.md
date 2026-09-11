@@ -72,6 +72,7 @@ go test -v -run TestName ./path/to/package
 
 Config stored at `~/.config/agcm/config.yaml` (or `$XDG_CONFIG_HOME/agcm/`):
 - `api.base_url` - API endpoint (default: https://api.access.redhat.com)
+- `ui.theme` - Color theme: auto, dark, light, dracula, solarized, mono (cycled with `t` in the TUI)
 - `defaults.account_number` - Default account filter
 - `defaults.group_number` - Default group filter
 - `debug.log_file` - Custom debug log file path

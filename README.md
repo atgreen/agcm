@@ -62,6 +62,8 @@ Configuration is stored at `~/.config/agcm/config.yaml`:
 ```yaml
 api:
   base_url: https://api.access.redhat.com
+ui:
+  theme: auto           # auto, dark, light, dracula, solarized, mono (cycle with `t` in the TUI)
 defaults:
   account_number: ""    # Default account filter
   group_number: ""      # Default group filter
@@ -194,8 +196,9 @@ The debug log path can also be set in `config.yaml` via `debug.log_file`.
 | `←/→` | Switch detail tabs |
 | `gg`, `G` | Go to top/bottom |
 | `PgUp/PgDn` | Page up/down |
-| `Tab` | Switch between list and detail panes |
+| `Tab`, `Enter` | Switch between list and detail panes |
 | `Esc` | Back to list |
+| `o` | Open selected case in browser |
 | `/` | Quick search by case number |
 | `f` | Filter dialog |
 | `F` | Clear filter |
@@ -206,6 +209,7 @@ The debug log path can also be set in `config.yaml` via `debug.log_file`.
 | `s` | Cycle sort field |
 | `S` | Toggle sort order |
 | `r` | Refresh |
+| `t` | Cycle color theme (dark, light, dracula, solarized, mono) |
 | `e` | Export current case |
 | `E` | Export all cases |
 | `B` | Bundle export (4MB markdown files) |

@@ -8,8 +8,10 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/green/agcm/internal/api"
+	"github.com/green/agcm/internal/tui/styles"
 )
 
 func TestNormalizeCaseNumber(t *testing.T) {
@@ -140,6 +142,32 @@ func TestSortCasesPreservesSelection(t *testing.T) {
 
 	if got := m.caseList.SelectedCase().CaseNumber; got != selected {
 		t.Errorf("selection after sort = %s, want %s", got, selected)
+	}
+}
+
+// Pressing t must advance through every theme and wrap back to the start,
+// re-skinning the shared styles as it goes.
+func TestCycleTheme(t *testing.T) {
+	m := frameModel(80, 24)
+	themes := styles.Themes()
+	start := m.themeIndex
+
+	for i := 1; i <= len(themes); i++ {
+		before := m.styles.Border.GetBorderTopForeground()
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+		m = updated.(*Model)
+
+		want := (start + i) % len(themes)
+		if m.themeIndex != want {
+			t.Fatalf("after %d presses themeIndex = %d, want %d", i, m.themeIndex, want)
+		}
+		after := m.styles.Border.GetBorderTopForeground()
+		if before == after && themes[want].Colors.Border != themes[(want+len(themes)-1)%len(themes)].Colors.Border {
+			t.Errorf("press %d: styles did not change (border %v)", i, after)
+		}
+	}
+	if m.themeIndex != start {
+		t.Errorf("full cycle should return to start theme, got %d want %d", m.themeIndex, start)
 	}
 }
 

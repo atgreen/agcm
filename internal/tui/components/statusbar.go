@@ -109,6 +109,8 @@ func (s *StatusBar) View() string {
 
 	// Center: Message or loading with spinner
 	if s.loading {
+		// Restyle each render so the spinner follows theme changes
+		s.spinner.Style = lipgloss.NewStyle().Foreground(s.styles.Warning.GetForeground())
 		center = s.spinner.View() + " " + s.styles.Warning.Render(s.loadingMsg)
 	} else if s.message != "" {
 		center = s.message
