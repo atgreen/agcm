@@ -645,13 +645,9 @@ func (c *CaseDetail) View() string {
 		if c.focused {
 			style = c.styles.Focused
 		}
-		height := c.height - 2
-		if height < 1 {
-			height = 1
-		}
 		return style.
-			Width(c.width).
-			Height(height).
+			Width(max(c.width-2, 1)).
+			Height(max(c.height-2, 1)).
 			Render(c.styles.Muted.Render("Select a case to view details"))
 	}
 
@@ -711,13 +707,11 @@ func (c *CaseDetail) View() string {
 		style = c.styles.Focused
 	}
 
-	height := c.height - 2
-	if height < 1 {
-		height = 1
-	}
+	// lipgloss Width/Height exclude the border; subtract it so the box
+	// totals exactly c.width by c.height
 	return style.
-		Width(c.width).
-		Height(height).
+		Width(max(c.width-2, 1)).
+		Height(max(c.height-2, 1)).
 		Render(sb.String())
 }
 

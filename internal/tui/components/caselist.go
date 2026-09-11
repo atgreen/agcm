@@ -366,13 +366,18 @@ func (c *CaseList) View() string {
 
 	content := strings.Join(outLines, "\n")
 
-	// Apply border style with explicit height to ensure exact sizing
+	// Apply border style with explicit inner sizing; lipgloss Width/Height
+	// exclude the border, so subtract it to keep the box at c.width/c.height
 	height := c.height - 2
 	if height < 1 {
 		height = 1
 	}
+	width := c.width - 2
+	if width < 1 {
+		width = 1
+	}
 	return style.
-		Width(c.width).
+		Width(width).
 		Height(height).
 		Render(content)
 }
@@ -635,6 +640,8 @@ func (c *CaseList) renderRow(cs *api.Case, width int, selected bool) string {
 	if selected {
 		row := padRight(cs.CaseNumber, colCase) + " " + padRight(dateStr, colDate) + " " +
 			padRight(sev, colSev) + " " + padRight(status, statusCol) + " " + summary
+		// Hard-cut before styling so an over-wide row can't wrap the box
+		row = runewidth.Truncate(row, width, "")
 		return c.styles.ListItemSelected.Width(width).Render(row)
 	}
 

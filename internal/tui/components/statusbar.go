@@ -128,14 +128,14 @@ func (s *StatusBar) View() string {
 
 	totalLen := leftLen + centerLen + rightLen
 	if totalLen >= s.width {
-		// Just show left and right
+		// Just show left and right, truncated to fit
 		padding := s.width - leftLen - rightLen
 		if padding < 0 {
 			padding = 0
 		}
 		return s.styles.StatusBar.
 			Width(s.width).
-			Render(left + strings.Repeat(" ", padding) + right)
+			Render(ansiCutWidth(left+strings.Repeat(" ", padding)+right, s.width))
 	}
 
 	// Distribute space
@@ -152,7 +152,7 @@ func (s *StatusBar) View() string {
 
 	return s.styles.StatusBar.
 		Width(s.width).
-		Render(content)
+		Render(ansiCutWidth(content, s.width))
 }
 
 // stripAnsi removes ANSI escape codes for length calculation
