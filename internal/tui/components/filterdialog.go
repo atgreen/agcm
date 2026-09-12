@@ -46,8 +46,6 @@ const (
 // FilterDialog is a multi-field filter dialog
 type FilterDialog struct {
 	styles *styles.Styles
-	width  int
-	height int
 
 	// Form fields
 	accountsInput    textinput.Model
@@ -74,9 +72,17 @@ type FilterDialog struct {
 	focusedField int
 	visible      bool
 
-	// Position tracking for mouse support
+	// Position tracking for mouse support; set by the app to wherever it
+	// actually overlays the dialog (see SetPosition)
 	dialogX int // Left edge of dialog on screen
 	dialogY int // Top edge of dialog on screen
+}
+
+// SetPosition records where the dialog is drawn on screen so mouse
+// hit-testing and dropdown placement line up with the rendered overlay.
+func (f *FilterDialog) SetPosition(x, y int) {
+	f.dialogX = x
+	f.dialogY = y
 }
 
 // NewFilterDialog creates a new filter dialog
@@ -217,24 +223,6 @@ func (f *FilterDialog) Hide() {
 // IsVisible returns whether the dialog is visible
 func (f *FilterDialog) IsVisible() bool {
 	return f.visible
-}
-
-// SetSize sets the screen size and calculates dialog position
-func (f *FilterDialog) SetSize(width, height int) {
-	f.width = width
-	f.height = height
-
-	// Calculate dialog position (centered, with space for dropdown on right)
-	dialogWidth := 60 + 42 // main dialog + dropdown space
-	dialogHeight := 28     // approximate dialog height
-	f.dialogX = (width - dialogWidth) / 2
-	f.dialogY = (height - dialogHeight) / 2
-	if f.dialogX < 0 {
-		f.dialogX = 0
-	}
-	if f.dialogY < 0 {
-		f.dialogY = 0
-	}
 }
 
 // buildFilter creates a CaseFilter from current dialog state
@@ -705,8 +693,8 @@ func (f *FilterDialog) renderProductTags() string {
 	return strings.Join(tags, " ")
 }
 
-// renderProductDropdownBox renders the product dropdown as a separate bordered box
-func (f *FilterDialog) renderProductDropdownBox() string {
+// RenderProductDropdown renders the product dropdown as a separate bordered box for overlay
+func (f *FilterDialog) RenderProductDropdown() string {
 	var content strings.Builder
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("33"))
@@ -872,11 +860,6 @@ func (f *FilterDialog) View() string {
 // ShouldShowProductDropdown returns true if the product dropdown should be displayed
 func (f *FilterDialog) ShouldShowProductDropdown() bool {
 	return f.visible && f.focusedField == fieldProduct
-}
-
-// RenderProductDropdown renders just the product dropdown box for overlay
-func (f *FilterDialog) RenderProductDropdown() string {
-	return f.renderProductDropdownBox()
 }
 
 // GetDropdownPosition returns the X,Y position where the dropdown should be placed

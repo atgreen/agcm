@@ -28,7 +28,6 @@ type Client struct {
 	httpClient *http.Client
 	token      string
 	tokenMu    sync.RWMutex
-	debug      bool
 	debugFile  *os.File
 
 	// TokenRefresher is called when a new access token is needed
@@ -45,17 +44,10 @@ func WithBaseURL(url string) ClientOption {
 	}
 }
 
-// WithHTTPClient sets a custom HTTP client
-func WithHTTPClient(hc *http.Client) ClientOption {
+// WithTimeout sets the HTTP client timeout
+func WithTimeout(d time.Duration) ClientOption {
 	return func(c *Client) {
-		c.httpClient = hc
-	}
-}
-
-// WithToken sets the initial access token
-func WithToken(token string) ClientOption {
-	return func(c *Client) {
-		c.token = token
+		c.httpClient.Timeout = d
 	}
 }
 
@@ -66,26 +58,10 @@ func WithTokenRefresher(fn func(ctx context.Context) (string, error)) ClientOpti
 	}
 }
 
-// WithDebug enables debug output to /tmp/agcm-debug.log
-//
-// Deprecated: Use WithDebugLog instead to specify a custom log path.
-func WithDebug(debug bool) ClientOption {
-	return func(c *Client) {
-		c.debug = debug
-		if debug {
-			f, err := os.OpenFile("/tmp/agcm-debug.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-			if err == nil {
-				c.debugFile = f
-			}
-		}
-	}
-}
-
 // WithDebugLog enables debug output to the specified file path.
 // Parent directories are created automatically.
 func WithDebugLog(path string) ClientOption {
 	return func(c *Client) {
-		c.debug = true
 		dir := filepath.Dir(path)
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			return
@@ -131,6 +107,22 @@ func (c *Client) SetToken(token string) {
 	c.tokenMu.Lock()
 	defer c.tokenMu.Unlock()
 	c.token = token
+}
+
+// debugf writes to the debug log when enabled
+func (c *Client) debugf(format string, args ...interface{}) {
+	if c.debugFile != nil {
+		_, _ = fmt.Fprintf(c.debugFile, format, args...)
+	}
+}
+
+// debugResponse logs a truncated preview of a response body
+func (c *Client) debugResponse(status int, body []byte) {
+	preview := string(body)
+	if len(preview) > 500 {
+		preview = preview[:500] + "..."
+	}
+	c.debugf("  Response: %d (%d bytes): %s\n", status, len(body), preview)
 }
 
 // getToken returns the current token, refreshing if needed
@@ -180,11 +172,9 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	if c.debug && c.debugFile != nil {
-		_, _ = fmt.Fprintf(c.debugFile, "[%s] %s %s\n", time.Now().Format("15:04:05"), method, u)
-		if len(bodyBytes) > 0 {
-			_, _ = fmt.Fprintf(c.debugFile, "  Request: %s\n", string(bodyBytes))
-		}
+	c.debugf("[%s] %s %s\n", time.Now().Format("15:04:05"), method, u)
+	if len(bodyBytes) > 0 {
+		c.debugf("  Request: %s\n", string(bodyBytes))
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -250,20 +240,11 @@ func (c *Client) getRaw(ctx context.Context, path string, query url.Values) ([]b
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		if c.debug && c.debugFile != nil {
-			_, _ = fmt.Fprintf(c.debugFile, "  Response: %d %s\n", resp.StatusCode, string(body))
-		}
+		c.debugf("  Response: %d %s\n", resp.StatusCode, string(body))
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 
-	if c.debug && c.debugFile != nil {
-		preview := string(body)
-		if len(preview) > 500 {
-			preview = preview[:500] + "..."
-		}
-		_, _ = fmt.Fprintf(c.debugFile, "  Response: %d (%d bytes): %s\n", resp.StatusCode, len(body), preview)
-	}
-
+	c.debugResponse(resp.StatusCode, body)
 	return body, nil
 }
 
@@ -290,19 +271,11 @@ func (c *Client) post(ctx context.Context, path string, requestBody interface{},
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if c.debug && c.debugFile != nil {
-			_, _ = fmt.Fprintf(c.debugFile, "  Response: %d %s\n", resp.StatusCode, string(respBody))
-		}
+		c.debugf("  Response: %d %s\n", resp.StatusCode, string(respBody))
 		return fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	if c.debug && c.debugFile != nil {
-		preview := string(respBody)
-		if len(preview) > 500 {
-			preview = preview[:500] + "..."
-		}
-		_, _ = fmt.Fprintf(c.debugFile, "  Response: %d (%d bytes): %s\n", resp.StatusCode, len(respBody), preview)
-	}
+	c.debugResponse(resp.StatusCode, respBody)
 
 	if result != nil {
 		if err := json.Unmarshal(respBody, result); err != nil {
@@ -318,7 +291,7 @@ func (c *Client) postHydra(ctx context.Context, path string, body io.Reader, res
 	hydraURL := "https://access.redhat.com" + path
 
 	var bodyBytes []byte
-	if body != nil && c.debug {
+	if body != nil && c.debugFile != nil {
 		bodyBytes, _ = io.ReadAll(body)
 		body = bytes.NewReader(bodyBytes)
 	}
@@ -331,31 +304,17 @@ func (c *Client) postHydra(ctx context.Context, path string, body io.Reader, res
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	// Get token
-	c.tokenMu.RLock()
-	token := c.token
-	c.tokenMu.RUnlock()
-
-	if token == "" && c.TokenRefresher != nil {
-		var err error
-		token, err = c.TokenRefresher(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to refresh token: %w", err)
-		}
-		c.tokenMu.Lock()
-		c.token = token
-		c.tokenMu.Unlock()
+	token, err := c.getToken(ctx)
+	if err != nil {
+		return err
 	}
-
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	if c.debug && c.debugFile != nil {
-		_, _ = fmt.Fprintf(c.debugFile, "[%s] POST %s\n", time.Now().Format("15:04:05"), hydraURL)
-		if len(bodyBytes) > 0 {
-			_, _ = fmt.Fprintf(c.debugFile, "  Request: %s\n", string(bodyBytes))
-		}
+	c.debugf("[%s] POST %s\n", time.Now().Format("15:04:05"), hydraURL)
+	if len(bodyBytes) > 0 {
+		c.debugf("  Request: %s\n", string(bodyBytes))
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -369,13 +328,7 @@ func (c *Client) postHydra(ctx context.Context, path string, body io.Reader, res
 		return fmt.Errorf("failed to read response: %w", err)
 	}
 
-	if c.debug && c.debugFile != nil {
-		preview := string(respBody)
-		if len(preview) > 500 {
-			preview = preview[:500] + "..."
-		}
-		_, _ = fmt.Fprintf(c.debugFile, "  Response: %d (%d bytes): %s\n", resp.StatusCode, len(respBody), preview)
-	}
+	c.debugResponse(resp.StatusCode, respBody)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("hydra API error %d: %s", resp.StatusCode, string(respBody))

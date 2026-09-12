@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/green/agcm/internal/api"
+	"github.com/green/agcm/internal/export"
 	"github.com/green/agcm/internal/tui/styles"
 	"github.com/mattn/go-runewidth"
 )
@@ -185,7 +186,7 @@ func (c *CaseDetail) LinkAt(x, y int) (string, bool) {
 	if y >= len(lines) {
 		return "", false
 	}
-	line := stripAnsiOSC(lines[y])
+	line := stripANSI(lines[y])
 	if line == "" {
 		return "", false
 	}
@@ -461,7 +462,7 @@ func (c *CaseDetail) renderAttachments() string {
 
 		size := "n/a"
 		if attSize, ok := attachmentSize(att); ok {
-			size = formatSize(attSize)
+			size = export.FormatSize(attSize)
 		}
 		date := att.CreatedDate.Format("2006-01-02")
 
@@ -495,45 +496,6 @@ func attachmentSize(att api.Attachment) (int64, bool) {
 	return 0, false
 }
 
-func stripAnsiOSC(s string) string {
-	var out strings.Builder
-	for i := 0; i < len(s); {
-		if s[i] == 0x1b {
-			if i+1 < len(s) && s[i+1] == '[' {
-				end := i + 2
-				for end < len(s) && (s[end] < 0x40 || s[end] > 0x7e) {
-					end++
-				}
-				if end < len(s) {
-					end++
-				}
-				i = end
-				continue
-			}
-			if i+1 < len(s) && s[i+1] == ']' {
-				end := i + 2
-				for end < len(s) {
-					if s[end] == 0x07 {
-						end++
-						break
-					}
-					if s[end] == 0x1b && end+1 < len(s) && s[end+1] == '\\' {
-						end += 2
-						break
-					}
-					end++
-				}
-				i = end
-				continue
-			}
-			i++
-			continue
-		}
-		out.WriteByte(s[i])
-		i++
-	}
-	return out.String()
-}
 
 func columnToByteIndex(s string, col int) int {
 	if col <= 0 {
@@ -565,11 +527,6 @@ func padRightSimple(s string, width int) string {
 		return s
 	}
 	return s + strings.Repeat(" ", width-len(s))
-}
-
-// Init implements tea.Model
-func (c *CaseDetail) Init() tea.Cmd {
-	return nil
 }
 
 // Update implements tea.Model
@@ -688,7 +645,7 @@ func (c *CaseDetail) View() string {
 		}
 		// Trim overly long lines to avoid terminal wrapping
 		if lipgloss.Width(vpLine) > c.viewport.Width {
-			vpLine = ansiCut(vpLine, c.viewport.Width)
+			vpLine = ansiCutWidth(vpLine, c.viewport.Width)
 		}
 		// Pad viewport line to consistent width
 		vpLineWidth := lipgloss.Width(vpLine)
@@ -753,100 +710,7 @@ func (c *CaseDetail) renderScrollbar() string {
 	return strings.Join(lines, "\n")
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 
-// ansiCut trims a string with ANSI codes to the given visual width.
-// It preserves CSI and OSC sequences so hyperlinks don't get broken.
-func ansiCut(s string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-
-	var result strings.Builder
-	visualPos := 0
-
-	for i := 0; i < len(s); {
-		if s[i] == 0x1b {
-			if i+1 < len(s) && s[i+1] == '[' {
-				// CSI sequence: ESC [ ... final (0x40-0x7E)
-				end := i + 2
-				for end < len(s) && (s[end] < 0x40 || s[end] > 0x7e) {
-					end++
-				}
-				if end < len(s) {
-					end++
-				}
-				if visualPos < width {
-					result.WriteString(s[i:end])
-				}
-				i = end
-				continue
-			}
-			if i+1 < len(s) && s[i+1] == ']' {
-				// OSC sequence: ESC ] ... BEL or ST (ESC \)
-				end := i + 2
-				for end < len(s) {
-					if s[end] == 0x07 {
-						end++
-						break
-					}
-					if s[end] == 0x1b && end+1 < len(s) && s[end+1] == '\\' {
-						end += 2
-						break
-					}
-					end++
-				}
-				if visualPos < width {
-					result.WriteString(s[i:end])
-				}
-				i = end
-				continue
-			}
-			// Fallback: include ESC + next byte if present
-			if visualPos < width {
-				result.WriteByte(s[i])
-				if i+1 < len(s) {
-					result.WriteByte(s[i+1])
-				}
-			}
-			i += 2
-			continue
-		}
-		if visualPos >= width {
-			break
-		}
-		result.WriteByte(s[i])
-		visualPos++
-		i++
-	}
-
-	return result.String()
-}
-
-func formatSize(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 
 // linkify finds URLs in text and makes them clickable using OSC 8 hyperlinks
 func linkify(text string, style lipgloss.Style) string {

@@ -72,6 +72,12 @@ func init() {
 func runListCases(cmd *cobra.Command, args []string) error {
 	client := GetAPIClient()
 
+	// --limit flag wins; otherwise ui.page_size from the config file
+	if !cmd.Flags().Changed("limit") {
+		if ps := configMgr.Get().UI.PageSize; ps > 0 {
+			listLimit = ps
+		}
+	}
 	filter := &api.CaseFilter{
 		Count: listLimit,
 	}
@@ -79,36 +85,8 @@ func runListCases(cmd *cobra.Command, args []string) error {
 	hasCliFilters := listStatus != "" || listSeverity != "" || listProduct != "" ||
 		listAccount != "" || listGroup != "" || listOwner != ""
 
-	// Check for preset argument (0-9)
-	if len(args) == 1 {
-		presetSlot := args[0]
-		if len(presetSlot) == 1 && presetSlot[0] >= '0' && presetSlot[0] <= '9' {
-			preset := configMgr.GetPreset(presetSlot)
-			if preset == nil {
-				if !hasCliFilters {
-					fmt.Printf("No preset saved in slot %s. Nothing to list.\n", presetSlot)
-					return nil
-				}
-				// Has CLI filters, continue without preset
-			} else {
-				// Load preset filters as defaults
-				fmt.Printf("Using preset %s: %s\n", presetSlot, preset.Name)
-				if len(preset.Status) > 0 {
-					filter.Status = preset.Status
-				}
-				if len(preset.Severity) > 0 {
-					filter.Severity = preset.Severity
-				}
-				if len(preset.Products) > 0 {
-					filter.Products = preset.Products
-				}
-				if len(preset.Accounts) > 0 {
-					filter.Accounts = preset.Accounts
-				}
-			}
-		} else {
-			return fmt.Errorf("invalid preset: %s (must be 0-9)", presetSlot)
-		}
+	if done, err := applyPresetArg(args, hasCliFilters, filter, "list"); done || err != nil {
+		return err
 	}
 
 	// CLI flags override preset values

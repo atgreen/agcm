@@ -14,7 +14,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -103,7 +102,6 @@ type Model struct {
 	cases            []api.Case
 	sortField        SortField
 	sortReverse      bool
-	err              error
 	loadingCases     bool
 	loadingDetail    bool
 	initialLoadDone  bool   // Set true after first successful case load
@@ -172,10 +170,6 @@ type debounceTimeoutMsg struct {
 
 type errMsg struct {
 	err error
-}
-
-type statusMsg struct {
-	message string
 }
 
 type exportProgressMsg struct {
@@ -284,42 +278,29 @@ func (m *Model) Init() tea.Cmd {
 	)
 }
 
-// loadCasesWithFilter loads cases using a custom filter
+// loadCasesWithFilter loads the first page of cases for the given filter
 func (m *Model) loadCasesWithFilter(filter *api.CaseFilter) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		reqFilter := m.withDefaults(filter, 0, casePageSize)
-		result, err := m.client.ListCases(ctx, reqFilter)
-		if err != nil {
-			return casesLoadedMsg{err: err}
-		}
-		return casesLoadedMsg{
-			cases:      result.Items,
-			totalCount: result.TotalCount,
-			startIndex: result.StartIndex,
-			append:     false,
-		}
-	}
+	return func() tea.Msg { return m.fetchCasesPage(filter, 0, false) }
 }
 
-// loadCasesPage loads a page of cases, optionally appending.
+// loadCasesPage loads a page of cases under the active filter, optionally appending.
 func (m *Model) loadCasesPage(start int, append bool) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+	return func() tea.Msg { return m.fetchCasesPage(m.activeFilter, start, append) }
+}
 
-		reqFilter := m.withDefaults(m.activeFilter, start, casePageSize)
-		result, err := m.client.ListCases(ctx, reqFilter)
-		if err != nil {
-			return casesLoadedMsg{err: err}
-		}
-		return casesLoadedMsg{
-			cases:      result.Items,
-			totalCount: result.TotalCount,
-			startIndex: result.StartIndex,
-			append:     append,
-		}
+func (m *Model) fetchCasesPage(filter *api.CaseFilter, start int, append bool) tea.Msg {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := m.client.ListCases(ctx, m.withDefaults(filter, start, casePageSize))
+	if err != nil {
+		return casesLoadedMsg{err: err}
+	}
+	return casesLoadedMsg{
+		cases:      result.Items,
+		totalCount: result.TotalCount,
+		startIndex: result.StartIndex,
+		append:     append,
 	}
 }
 
@@ -497,6 +478,24 @@ func (m *Model) searchInCase(query string) []components.TextMatch {
 	return matches
 }
 
+// applyTextSearchQuery recomputes matches for the query, highlights them in
+// the detail pane, and jumps to the first match
+func (m *Model) applyTextSearchQuery(query string) {
+	if query == "" {
+		m.textSearch.SetMatches(nil)
+		m.caseDetail.ClearSearchHighlight()
+		return
+	}
+	matches := m.searchInCase(query)
+	m.textSearch.SetMatches(matches)
+	m.caseDetail.SetSearchHighlight(query)
+	if len(matches) > 0 {
+		m.caseDetail.SetActiveTab(matches[0].TabIndex)
+		m.caseDetail.SetCurrentMatch(matches[0].TabIndex, matches[0].LineNumber)
+		m.caseDetail.ScrollToMatch(matches[0].TabIndex, matches[0].LineNumber)
+	}
+}
+
 // addOrSelectCase adds a case to the list if not present, then selects it
 func (m *Model) addOrSelectCase(c *api.Case) {
 	if c == nil {
@@ -603,6 +602,13 @@ func mergeCases(existing, page []api.Case) []api.Case {
 	return existing
 }
 
+// resetForReload clears cached details and counts before loading a fresh case list
+func (m *Model) resetForReload() {
+	m.loadingCases = true
+	m.detailCache = make(map[string]*CachedCaseDetail)
+	m.totalCases = 0
+}
+
 // checkHighlightChange checks if the highlighted case changed and triggers debounced fetch
 func (m *Model) checkHighlightChange() tea.Cmd {
 	selected := m.caseList.SelectedCase()
@@ -706,20 +712,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.textSearchMode && m.textSearch.IsVisible() {
 		// Handle search query messages here (they come back from textSearch.Update)
 		if queryMsg, ok := msg.(components.TextSearchQueryMsg); ok {
-			if queryMsg.Query != "" {
-				matches := m.searchInCase(queryMsg.Query)
-				m.textSearch.SetMatches(matches)
-				m.caseDetail.SetSearchHighlight(queryMsg.Query)
-				// Set the first match as current and scroll to it
-				if len(matches) > 0 {
-					m.caseDetail.SetActiveTab(matches[0].TabIndex)
-					m.caseDetail.SetCurrentMatch(matches[0].TabIndex, matches[0].LineNumber)
-					m.caseDetail.ScrollToMatch(matches[0].TabIndex, matches[0].LineNumber)
-				}
-			} else {
-				m.textSearch.SetMatches(nil)
-				m.caseDetail.ClearSearchHighlight()
-			}
+			m.applyTextSearchQuery(queryMsg.Query)
 			return m, nil
 		}
 
@@ -812,54 +805,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case components.FilterApplyMsg:
 		m.activeFilter = msg.Filter
-		m.loadingCases = true
-		m.detailCache = make(map[string]*CachedCaseDetail)
-		m.totalCases = 0
-		m.caseList.SetTotalCount(0)
+		m.resetForReload()
 		m.statusBar.SetMessage(m.styles.Muted.Render("Applying filter..."), 0)
 		return m, tea.Batch(m.loadCasesWithFilter(msg.Filter), m.spinner.Tick)
 
 	case components.FilterClearMsg:
 		m.activeFilter = nil
-		m.loadingCases = true
-		m.detailCache = make(map[string]*CachedCaseDetail)
-		m.totalCases = 0
-		m.caseList.SetTotalCount(0)
+		m.resetForReload()
 		m.statusBar.SetMessage(m.styles.Muted.Render("Clearing filter..."), 0)
 		return m, tea.Batch(m.loadCasesPage(0, false), m.spinner.Tick)
 
 	case components.FilterCancelMsg:
 		// Dialog closed without changes
 
-	case productsLoadedMsg:
-		if msg.err != nil {
-			m.statusBar.SetMessage(m.styles.Warning.Render("Failed to load products"), 3*time.Second)
-			m.filterDialog.SetProductsError("load failed")
-		} else {
-			m.products = msg.products
-			m.filterDialog.SetProducts(m.products)
-		}
-
 	case components.TextSearchCloseMsg:
 		m.textSearchMode = false
 		m.caseDetail.ClearSearchHighlight()
 
 	case components.TextSearchQueryMsg:
-		// Search in case content and update matches
-		if msg.Query != "" {
-			matches := m.searchInCase(msg.Query)
-			m.textSearch.SetMatches(matches)
-			m.caseDetail.SetSearchHighlight(msg.Query)
-			// Set the first match as current and scroll to it
-			if len(matches) > 0 {
-				m.caseDetail.SetActiveTab(matches[0].TabIndex)
-				m.caseDetail.SetCurrentMatch(matches[0].TabIndex, matches[0].LineNumber)
-				m.caseDetail.ScrollToMatch(matches[0].TabIndex, matches[0].LineNumber)
-			}
-		} else {
-			m.textSearch.SetMatches(nil)
-			m.caseDetail.ClearSearchHighlight()
-		}
+		m.applyTextSearchQuery(msg.Query)
 
 	case debounceTimeoutMsg:
 		// Only fetch if this is still the pending case
@@ -949,10 +913,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filterBar.Clear()
 			m.filterBar.ClearPreset()
 			m.updateLayout()
-			m.loadingCases = true
-			m.detailCache = make(map[string]*CachedCaseDetail)
-			m.totalCases = 0
-			m.caseList.SetTotalCount(0)
+			m.resetForReload()
 			m.statusBar.SetMessage(m.styles.Muted.Render("Filter cleared"), 2*time.Second)
 			return m, tea.Batch(m.loadCasesPage(0, false), m.spinner.Tick)
 		}
@@ -1008,73 +969,37 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Export current case (e)
 		if key.Matches(msg, m.keys.Export) {
-			if c := m.caseDetail.GetCase(); c != nil {
-				m.pendingExport = "single"
-				m.exportCaseNumber = c.CaseNumber
-				defaultName := fmt.Sprintf("case-%s.md", c.CaseNumber)
-				cmd := m.filePicker.Show(
-					"Export Case",
-					fmt.Sprintf("Export case %s to markdown file", c.CaseNumber),
-					components.FilePickerModeFile,
-					defaultName,
-					func(filename string) {
-						m.exportPath = filename
-					},
-					func() {
-						m.pendingExport = ""
-					},
-				)
-				return m, cmd
-			} else {
+			c := m.caseDetail.GetCase()
+			if c == nil {
 				m.statusBar.SetMessage(m.styles.Warning.Render("No case selected"), 2*time.Second)
+				return m, nil
 			}
-			return m, nil
+			m.exportCaseNumber = c.CaseNumber
+			return m, m.promptExport("single", "Export Case",
+				fmt.Sprintf("Export case %s to markdown file", c.CaseNumber),
+				components.FilePickerModeFile, fmt.Sprintf("case-%s.md", c.CaseNumber))
 		}
 
 		// Export all cases (E)
 		if key.Matches(msg, m.keys.BulkExport) {
-			if len(m.cases) > 0 {
-				m.pendingExport = "bulk"
-				cmd := m.filePicker.Show(
-					"Export All Cases",
-					fmt.Sprintf("Select directory for %d cases", len(m.cases)),
-					components.FilePickerModeDir,
-					"./exports",
-					func(dir string) {
-						m.exportPath = dir
-					},
-					func() {
-						m.pendingExport = ""
-					},
-				)
-				return m, cmd
-			} else {
+			if len(m.cases) == 0 {
 				m.statusBar.SetMessage(m.styles.Warning.Render("No cases loaded"), 2*time.Second)
+				return m, nil
 			}
-			return m, nil
+			return m, m.promptExport("bulk", "Export All Cases",
+				fmt.Sprintf("Select directory for %d cases", len(m.cases)),
+				components.FilePickerModeDir, "./exports")
 		}
 
 		// Bundle export (B) - export to bundled markdown files
 		if key.Matches(msg, m.keys.BundleExport) {
-			if len(m.cases) > 0 {
-				m.pendingExport = "bundle"
-				cmd := m.filePicker.Show(
-					"Bundle Export",
-					fmt.Sprintf("Select directory for %d cases (4MB bundles)", len(m.cases)),
-					components.FilePickerModeDir,
-					"./exports",
-					func(dir string) {
-						m.exportPath = dir
-					},
-					func() {
-						m.pendingExport = ""
-					},
-				)
-				return m, cmd
-			} else {
+			if len(m.cases) == 0 {
 				m.statusBar.SetMessage(m.styles.Warning.Render("No cases loaded"), 2*time.Second)
+				return m, nil
 			}
-			return m, nil
+			return m, m.promptExport("bundle", "Bundle Export",
+				fmt.Sprintf("Select directory for %d cases (4MB bundles)", len(m.cases)),
+				components.FilePickerModeDir, "./exports")
 		}
 
 		// Global left/right for tab switching in detail pane
@@ -1139,7 +1064,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			selectedCase = sel.CaseNumber
 		}
 		if msg.err != nil {
-			m.err = msg.err
 			m.statusBar.SetConnected(false)
 			m.statusBar.SetMessage(m.styles.Error.Render("Error: "+msg.err.Error()), 5*time.Second)
 		} else if msg.append && msg.startIndex != len(m.cases) {
@@ -1176,7 +1100,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Then restore scroll offset (overrides ensureVisible's changes)
 				m.caseList.SetOffset(savedOffset)
 			}
-			m.caseList.SetTotalCount(m.totalCases)
 			// Update filter bar
 			if m.activeFilter != nil {
 				m.filterBar.SetFilter(m.activeFilter, len(m.cases), m.totalCases)
@@ -1199,7 +1122,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case caseDetailLoadedMsg:
 		m.loadingDetail = false
 		if msg.err != nil {
-			m.err = msg.err
 			m.statusBar.SetMessage(m.styles.Error.Render("Error: "+msg.err.Error()), 5*time.Second)
 		} else {
 			// Cache the result
@@ -1221,11 +1143,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case errMsg:
-		m.err = msg.err
 		m.statusBar.SetMessage(m.styles.Error.Render("Error: "+msg.err.Error()), 5*time.Second)
-
-	case statusMsg:
-		m.statusBar.SetMessage(msg.message, 3*time.Second)
 	}
 
 	// Update status bar (only show loading in status bar after initial load; overlay handles initial)
@@ -1244,6 +1162,16 @@ func (m *Model) togglePane() {
 		m.currentPane = PaneList
 	}
 	m.updateFocus()
+}
+
+// promptExport opens the file picker for an export, remembering which kind
+// to start once a path is chosen
+func (m *Model) promptExport(kind, title, desc string, mode components.FilePickerMode, defaultPath string) tea.Cmd {
+	m.pendingExport = kind
+	return m.filePicker.Show(title, desc, mode, defaultPath,
+		func(path string) { m.exportPath = path },
+		func() { m.pendingExport = "" },
+	)
 }
 
 // cancelExport aborts any in-flight export; wired to Esc in the progress modal.
@@ -1310,8 +1238,6 @@ func (m *Model) startBulkExport(outputDir string) tea.Cmd {
 	return tea.Batch(exportCmd, m.waitExportProgress())
 }
 
-const maxBundleSize = 4 * 1024 * 1024 // 4MB
-
 func (m *Model) startBundleExport(outputDir string) tea.Cmd {
 	m.exporting = true
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1324,91 +1250,18 @@ func (m *Model) startBundleExport(outputDir string) tea.Cmd {
 	exportCmd := func() tea.Msg {
 		defer close(progressCh)
 
-		// Create output directory
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
-			return exportCompleteMsg{err: fmt.Errorf("failed to create output directory: %w", err)}
-		}
-
-		// Get all case numbers
 		caseNumbers, err := m.fetchAllCaseNumbers(ctx, filter)
 		if err != nil {
 			return exportCompleteMsg{err: err}
 		}
 
-		formatter, err := export.NewFormatter()
+		exporter, err := export.NewExporter(m.client, export.DefaultOptions())
 		if err != nil {
-			return exportCompleteMsg{err: fmt.Errorf("failed to create formatter: %w", err)}
+			return exportCompleteMsg{err: err}
 		}
 
-		totalCases := len(caseNumbers)
-		bundleNum := 1
-		var currentBundle strings.Builder
-		casesInBundle := 0
-
-		for i, caseNum := range caseNumbers {
-			select {
-			case <-ctx.Done():
-				return exportCompleteMsg{err: ctx.Err()}
-			default:
-			}
-
-			// Send progress
-			progressCh <- export.Progress{
-				TotalCases:     totalCases,
-				CompletedCases: i,
-				CurrentCase:    caseNum,
-				CurrentStep:    fmt.Sprintf("Fetching case %d/%d", i+1, totalCases),
-			}
-
-			// Fetch case details
-			caseDetail, err := m.client.GetCase(ctx, caseNum)
-			if err != nil {
-				continue // Skip failed cases
-			}
-
-			// Fetch comments
-			comments, _ := m.client.GetCaseComments(ctx, caseNum)
-
-			// Format case (without attachments)
-			caseExport := &export.CaseExport{
-				Case:        caseDetail,
-				Comments:    comments,
-				Attachments: nil, // No attachments in bundle
-				ExportedAt:  time.Now(),
-			}
-
-			caseMarkdown, err := formatter.FormatCase(caseExport)
-			if err != nil {
-				continue
-			}
-
-			// Check if adding this case would exceed bundle size
-			newSize := currentBundle.Len() + len(caseMarkdown) + 10 // +10 for separator
-			if currentBundle.Len() > 0 && newSize > maxBundleSize {
-				// Write current bundle and start new one
-				bundlePath := filepath.Join(outputDir, fmt.Sprintf("export-bundle-%d.md", bundleNum))
-				if err := os.WriteFile(bundlePath, []byte(currentBundle.String()), 0644); err != nil {
-					return exportCompleteMsg{err: fmt.Errorf("failed to write bundle %d: %w", bundleNum, err)}
-				}
-				bundleNum++
-				currentBundle.Reset()
-				casesInBundle = 0
-			}
-
-			// Add separator if not first case in bundle
-			if casesInBundle > 0 {
-				currentBundle.WriteString("\n\n---\n\n")
-			}
-			currentBundle.WriteString(caseMarkdown)
-			casesInBundle++
-		}
-
-		// Write final bundle if it has content
-		if currentBundle.Len() > 0 {
-			bundlePath := filepath.Join(outputDir, fmt.Sprintf("export-bundle-%d.md", bundleNum))
-			if err := os.WriteFile(bundlePath, []byte(currentBundle.String()), 0644); err != nil {
-				return exportCompleteMsg{err: fmt.Errorf("failed to write bundle %d: %w", bundleNum, err)}
-			}
+		if _, _, err := exporter.ExportBundles(ctx, caseNumbers, outputDir, progressCh); err != nil {
+			return exportCompleteMsg{err: err}
 		}
 
 		absPath, _ := filepath.Abs(outputDir)
@@ -1771,12 +1624,12 @@ func (m *Model) View() string {
 
 		// If loading cases (after initial load), overlay spinner on list pane
 		if m.loadingCases && m.initialLoadDone {
-			list = m.renderListWithSpinner(list)
+			list = m.overlaySpinner(list, "Loading cases...")
 		}
 
 		// If loading detail, overlay spinner on detail pane
 		if m.loadingDetail {
-			detail = m.renderDetailWithSpinner(detail)
+			detail = m.overlaySpinner(detail, "Loading case details...")
 		}
 
 		content = lipgloss.JoinVertical(lipgloss.Left, list, detail)
@@ -1798,14 +1651,19 @@ func (m *Model) View() string {
 		view = overlayCenter(view, m.quickSearch.View(), m.width, m.height)
 	}
 
-	// Filter dialog overlay
+	// Filter dialog overlay; record where it lands so mouse hit-testing and
+	// dropdown placement match the rendered position
 	if m.filterDialog.IsVisible() {
-		view = overlayCenter(view, m.filterDialog.View(), m.width, m.height)
+		dialog := m.filterDialog.View()
+		dialogX := max((m.width-lipgloss.Width(dialog))/2, 0)
+		dialogY := max((m.height-lipgloss.Height(dialog))/2, 0)
+		m.filterDialog.SetPosition(dialogX, dialogY)
+		view = overlayAt(view, dialog, dialogX, dialogY, m.height)
 
 		// Product dropdown overlay (separate so it truly overlays content)
 		if m.filterDialog.ShouldShowProductDropdown() {
 			dropdownX, dropdownY := m.filterDialog.GetDropdownPosition()
-			view = overlayAt(view, m.filterDialog.RenderProductDropdown(), dropdownX, dropdownY, m.width, m.height)
+			view = overlayAt(view, m.filterDialog.RenderProductDropdown(), dropdownX, dropdownY, m.height)
 		}
 	}
 
@@ -1831,7 +1689,7 @@ func (m *Model) View() string {
 
 	// Loading cases overlay (show until first successful case load)
 	if !m.initialLoadDone {
-		view = overlayCenter(view, m.renderLoadingBox(), m.width, m.height)
+		view = overlayCenter(view, m.spinnerBox("Loading cases..."), m.width, m.height)
 	}
 
 	// Enforce exact height to prevent terminal scrolling
@@ -1848,56 +1706,9 @@ func (m *Model) View() string {
 
 // overlayCenter places a dialog box centered on top of a background
 func overlayCenter(background, dialog string, width, height int) string {
-	bgLines := strings.Split(background, "\n")
-	dialogLines := strings.Split(dialog, "\n")
-
-	// Ensure background has enough lines
-	for len(bgLines) < height {
-		bgLines = append(bgLines, "")
-	}
-
-	dialogHeight := len(dialogLines)
-	dialogWidth := lipgloss.Width(dialog)
-
-	// Calculate center position
-	startY := (height - dialogHeight) / 2
-	startX := (width - dialogWidth) / 2
-
-	if startY < 0 {
-		startY = 0
-	}
-	if startX < 0 {
-		startX = 0
-	}
-
-	// Overlay dialog onto background
-	for i, dialogLine := range dialogLines {
-		bgY := startY + i
-		if bgY >= len(bgLines) {
-			break
-		}
-
-		bgLine := bgLines[bgY]
-		// Pad background line if needed
-		bgLineWidth := lipgloss.Width(bgLine)
-		if bgLineWidth < startX {
-			bgLine += strings.Repeat(" ", startX-bgLineWidth)
-		}
-
-		// Split background line at overlay position
-		var before, after string
-		if startX > 0 && bgLineWidth > 0 {
-			before = ansiCut(bgLine, 0, startX)
-		}
-		afterStart := startX + lipgloss.Width(dialogLine)
-		if bgLineWidth > afterStart {
-			after = ansiCut(bgLine, afterStart, bgLineWidth)
-		}
-
-		bgLines[bgY] = before + dialogLine + after
-	}
-
-	return strings.Join(bgLines[:height], "\n")
+	x := (width - lipgloss.Width(dialog)) / 2
+	y := (height - lipgloss.Height(dialog)) / 2
+	return overlayAt(background, dialog, x, y, height)
 }
 
 // overlayBottom places an overlay at the bottom of the screen
@@ -1931,7 +1742,7 @@ func overlayBottom(background, overlay string, width, height int) string {
 }
 
 // overlayAt places an overlay at a specific x,y position on the screen
-func overlayAt(background, overlay string, x, y, width, height int) string {
+func overlayAt(background, overlay string, x, y, height int) string {
 	bgLines := strings.Split(background, "\n")
 	overlayLines := strings.Split(overlay, "\n")
 
@@ -1966,11 +1777,11 @@ func overlayAt(background, overlay string, x, y, width, height int) string {
 		// Split background line at overlay position
 		var before, after string
 		if x > 0 && bgLineWidth > 0 {
-			before = ansiCut(bgLine, 0, x)
+			before = components.AnsiCut(bgLine, 0, x)
 		}
 		afterStart := x + lipgloss.Width(overlayLine)
 		if bgLineWidth > afterStart {
-			after = ansiCut(bgLine, afterStart, bgLineWidth)
+			after = components.AnsiCut(bgLine, afterStart, bgLineWidth)
 		}
 
 		bgLines[bgY] = before + overlayLine + after
@@ -1981,64 +1792,6 @@ func overlayAt(background, overlay string, x, y, width, height int) string {
 
 func trimTrailingNewlines(s string) string {
 	return strings.TrimRight(s, "\n")
-}
-
-// ansiCut cuts a string at the given visual positions, keeping CSI and OSC
-// escape sequences intact so styling and OSC-8 hyperlinks survive the cut.
-func ansiCut(s string, start, end int) string {
-	var result strings.Builder
-	visualPos := 0
-
-	for i := 0; i < len(s); {
-		if s[i] == 0x1b {
-			seqEnd := i + 1
-			if i+1 < len(s) && s[i+1] == '[' {
-				// CSI sequence: ESC [ ... final byte (0x40-0x7E)
-				seqEnd = i + 2
-				for seqEnd < len(s) && (s[seqEnd] < 0x40 || s[seqEnd] > 0x7e) {
-					seqEnd++
-				}
-				if seqEnd < len(s) {
-					seqEnd++
-				}
-			} else if i+1 < len(s) && s[i+1] == ']' {
-				// OSC sequence: ESC ] ... BEL or ST (ESC \)
-				seqEnd = i + 2
-				for seqEnd < len(s) {
-					if s[seqEnd] == 0x07 {
-						seqEnd++
-						break
-					}
-					if s[seqEnd] == 0x1b && seqEnd+1 < len(s) && s[seqEnd+1] == '\\' {
-						seqEnd += 2
-						break
-					}
-					seqEnd++
-				}
-			} else if i+1 < len(s) {
-				seqEnd = i + 2
-			}
-			if visualPos >= start && visualPos < end {
-				result.WriteString(s[i:seqEnd])
-			}
-			i = seqEnd
-			continue
-		}
-
-		r, size := utf8.DecodeRuneInString(s[i:])
-		w := runewidth.RuneWidth(r)
-		// Keep a rune only if it fits entirely inside the window, so a
-		// double-width rune straddling the boundary is dropped, not split
-		if visualPos >= start && visualPos+w <= end {
-			result.WriteString(s[i : i+size])
-		}
-		visualPos += w
-		i += size
-		if visualPos >= end {
-			break
-		}
-	}
-	return result.String()
 }
 
 // savePreset stores the current filter in the given preset slot
@@ -2121,62 +1874,19 @@ func (m *Model) presetToFilter(preset *config.FilterPreset) *api.CaseFilter {
 	}
 }
 
-// renderListWithSpinner overlays a spinner box on the case list pane
-func (m *Model) renderListWithSpinner(list string) string {
-	spinnerText := m.spinner.View() + " Loading cases..."
-
-	boxStyle := lipgloss.NewStyle().
+// spinnerBox renders a bordered spinner with a message
+func (m *Model) spinnerBox(text string) string {
+	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.styles.Header.GetBackground()).
-		Padding(1, 3)
-
-	spinnerBox := boxStyle.Render(spinnerText)
-
-	listWidth := lipgloss.Width(list)
-	listHeight := lipgloss.Height(list)
-
-	return lipgloss.Place(
-		listWidth,
-		listHeight,
-		lipgloss.Center,
-		lipgloss.Center,
-		spinnerBox,
-	)
+		Padding(1, 3).
+		Render(m.spinner.View() + " " + text)
 }
 
-// renderDetailWithSpinner overlays a spinner box on the detail pane
-func (m *Model) renderDetailWithSpinner(detail string) string {
-	spinnerText := m.spinner.View() + " Loading case details..."
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.styles.Header.GetBackground()).
-		Padding(1, 3)
-
-	spinnerBox := boxStyle.Render(spinnerText)
-
-	detailWidth := lipgloss.Width(detail)
-	detailHeight := lipgloss.Height(detail)
-
-	return lipgloss.Place(
-		detailWidth,
-		detailHeight,
-		lipgloss.Center,
-		lipgloss.Center,
-		spinnerBox,
-	)
-}
-
-// renderLoadingBox renders a centered loading box with spinner
-func (m *Model) renderLoadingBox() string {
-	spinnerText := m.spinner.View() + " Loading cases..."
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.styles.Header.GetBackground()).
-		Padding(1, 3)
-
-	return boxStyle.Render(spinnerText)
+// overlaySpinner centers a spinner box over a rendered pane
+func (m *Model) overlaySpinner(pane, text string) string {
+	return lipgloss.Place(lipgloss.Width(pane), lipgloss.Height(pane),
+		lipgloss.Center, lipgloss.Center, m.spinnerBox(text))
 }
 
 // renderAbout renders the About box overlay

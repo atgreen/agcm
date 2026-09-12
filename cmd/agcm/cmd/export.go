@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -125,7 +124,6 @@ func runExportCase(cmd *cobra.Command, args []string) error {
 		Combined:           exportCombined,
 		Concurrency:        exportConcurrency,
 		TemplatePath:       exportTemplate,
-		CaseNumbers:        args,
 		Debug:              IsDebugMode(),
 		DebugFile:          client.DebugFile(),
 	}
@@ -179,37 +177,10 @@ func runExportCases(cmd *cobra.Command, args []string) error {
 	hasCliFilters := exportStatus != "" || exportSeverity != "" || exportProduct != "" ||
 		exportSince != "" || exportUntil != "" || exportAccount != "" || exportGroup != ""
 
-	// Check for preset argument (0-9)
-	if len(args) == 1 {
-		presetSlot := args[0]
-		if len(presetSlot) == 1 && presetSlot[0] >= '0' && presetSlot[0] <= '9' {
-			preset := configMgr.GetPreset(presetSlot)
-			if preset == nil {
-				if !hasCliFilters {
-					fmt.Printf("No preset saved in slot %s. Nothing to export.\n", presetSlot)
-					return nil
-				}
-				// Has CLI filters, continue without preset
-			} else {
-				// Load preset filters as defaults
-				fmt.Printf("Using preset %s: %s\n", presetSlot, preset.Name)
-				if len(preset.Status) > 0 {
-					filter.Status = preset.Status
-				}
-				if len(preset.Severity) > 0 {
-					filter.Severity = preset.Severity
-				}
-				if len(preset.Products) > 0 {
-					filter.Products = preset.Products
-				}
-				if len(preset.Accounts) > 0 {
-					filter.Accounts = preset.Accounts
-				}
-			}
-		} else {
-			return fmt.Errorf("invalid preset: %s (must be 0-9)", presetSlot)
-		}
-	} else if !hasCliFilters {
+	if done, err := applyPresetArg(args, hasCliFilters, filter, "export"); done || err != nil {
+		return err
+	}
+	if len(args) != 1 && !hasCliFilters {
 		// No preset and no CLI filters
 		fmt.Println("No filters specified. Use a preset (0-9) or filter flags.")
 		fmt.Println("Run 'agcm export cases --help' for usage.")
@@ -322,15 +293,8 @@ func runExportCases(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-const maxBundleSize = 4 * 1024 * 1024 // 4MB
-
 func runBundleExport(client *api.Client, filter *api.CaseFilter) error {
 	ctx := context.Background()
-
-	// Create output directory
-	if err := os.MkdirAll(exportOutputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
-	}
 
 	// Fetch cases matching filter
 	fmt.Println("Fetching cases matching filters...")
@@ -344,75 +308,32 @@ func runBundleExport(client *api.Client, filter *api.CaseFilter) error {
 		return nil
 	}
 
-	formatter, err := export.NewFormatter()
-	if err != nil {
-		return fmt.Errorf("failed to create formatter: %w", err)
-	}
-
-	totalCases := len(result.Items)
-	bundleNum := 1
-	var currentBundle strings.Builder
-	casesInBundle := 0
-	casesExported := 0
-
+	caseNumbers := make([]string, len(result.Items))
 	for i, c := range result.Items {
-		fmt.Printf("\r[%d/%d] Fetching %s...          ", i+1, totalCases, c.CaseNumber)
-
-		// Fetch full case details
-		caseDetail, err := client.GetCase(ctx, c.CaseNumber)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "\nWarning: failed to fetch case %s: %v\n", c.CaseNumber, err)
-			continue
-		}
-
-		// Fetch comments
-		comments, _ := client.GetCaseComments(ctx, c.CaseNumber)
-
-		// Format case (without attachments)
-		caseExport := &export.CaseExport{
-			Case:        caseDetail,
-			Comments:    comments,
-			Attachments: nil,
-			ExportedAt:  time.Now(),
-		}
-
-		caseMarkdown, err := formatter.FormatCase(caseExport)
-		if err != nil {
-			continue
-		}
-
-		// Check if adding this case would exceed bundle size
-		newSize := currentBundle.Len() + len(caseMarkdown) + 10
-		if currentBundle.Len() > 0 && newSize > maxBundleSize {
-			// Write current bundle and start new one
-			bundlePath := filepath.Join(exportOutputDir, fmt.Sprintf("export-bundle-%d.md", bundleNum))
-			if err := os.WriteFile(bundlePath, []byte(currentBundle.String()), 0644); err != nil {
-				return fmt.Errorf("failed to write bundle %d: %w", bundleNum, err)
-			}
-			fmt.Printf("\nWrote %s (%d cases)\n", bundlePath, casesInBundle)
-			bundleNum++
-			currentBundle.Reset()
-			casesInBundle = 0
-		}
-
-		// Add separator if not first case in bundle
-		if casesInBundle > 0 {
-			currentBundle.WriteString("\n\n---\n\n")
-		}
-		currentBundle.WriteString(caseMarkdown)
-		casesInBundle++
-		casesExported++
+		caseNumbers[i] = c.CaseNumber
 	}
 
-	// Write final bundle if it has content
-	if currentBundle.Len() > 0 {
-		bundlePath := filepath.Join(exportOutputDir, fmt.Sprintf("export-bundle-%d.md", bundleNum))
-		if err := os.WriteFile(bundlePath, []byte(currentBundle.String()), 0644); err != nil {
-			return fmt.Errorf("failed to write bundle %d: %w", bundleNum, err)
-		}
-		fmt.Printf("\nWrote %s (%d cases)\n", bundlePath, casesInBundle)
+	exporter, err := export.NewExporter(client, export.DefaultOptions())
+	if err != nil {
+		return err
 	}
 
-	fmt.Printf("\nBundle export complete: %d cases in %d file(s)\n", casesExported, bundleNum)
+	progressCh := make(chan export.Progress, 10)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for p := range progressCh {
+			fmt.Printf("\r[%d/%d] Fetching %s...          ", p.CompletedCases+1, p.TotalCases, p.CurrentCase)
+		}
+	}()
+
+	exported, bundles, err := exporter.ExportBundles(ctx, caseNumbers, exportOutputDir, progressCh)
+	close(progressCh)
+	<-done
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("\nBundle export complete: %d cases in %d file(s)\n", exported, bundles)
 	return nil
 }

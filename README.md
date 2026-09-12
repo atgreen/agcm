@@ -153,7 +153,7 @@ To use with Claude Code or Claude Desktop, add to your MCP settings:
 }
 ```
 
-Available tools: `list_cases`, `get_case`, `search`, `get_solution`, `get_article`, `export_case`
+Available tools: `list_cases`, `get_case`, `search`, `get_solution`, `get_article`
 
 #### Shell Completions
 

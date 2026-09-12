@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/green/agcm/internal/api"
 	"github.com/green/agcm/internal/tui/styles"
@@ -146,5 +147,45 @@ func TestRenderRowDateFollowsSortField(t *testing.T) {
 	c.SetSort(SortByCreated, true)
 	if row := c.renderRow(cs, 75, true); !strings.Contains(row, "Jan 15 2020") {
 		t.Error("sorting by created: row should show the created date")
+	}
+}
+
+// keyMsg builds a tea.KeyMsg for a named key like "ctrl+u" or "pgdown".
+func keyMsg(name string) tea.KeyMsg {
+	switch name {
+	case "ctrl+u":
+		return tea.KeyMsg{Type: tea.KeyCtrlU}
+	case "ctrl+d":
+		return tea.KeyMsg{Type: tea.KeyCtrlD}
+	case "pgup":
+		return tea.KeyMsg{Type: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyMsg{Type: tea.KeyPgDown}
+	}
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(name)}
+}
+
+// The paging bindings advertised in the KeyMap (ctrl+u/ctrl+d and
+// pgup/pgdown) must actually move the cursor.
+func TestPageKeysMoveCursor(t *testing.T) {
+	c := testCaseList()
+	c.SetSize(80, 10)
+
+	cases := make([]api.Case, 50)
+	for i := range cases {
+		cases[i] = api.Case{CaseNumber: string(rune('a' + i%26))}
+	}
+	c.SetCases(cases)
+
+	for _, keys := range [][]string{{"ctrl+d", "ctrl+u"}, {"pgdown", "pgup"}} {
+		c.SetCursor(0)
+		c.Update(keyMsg(keys[0]))
+		if c.cursor == 0 {
+			t.Errorf("%s did not move cursor down", keys[0])
+		}
+		c.Update(keyMsg(keys[1]))
+		if c.cursor != 0 {
+			t.Errorf("%s did not move cursor back to top, got %d", keys[1], c.cursor)
+		}
 	}
 }

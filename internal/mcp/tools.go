@@ -19,7 +19,6 @@ func registerTools(s *server.MCPServer, client *api.Client) {
 	s.AddTool(searchTool(), searchHandler(client))
 	s.AddTool(getSolutionTool(), getSolutionHandler(client))
 	s.AddTool(getArticleTool(), getArticleHandler(client))
-	s.AddTool(exportCaseTool(), exportCaseHandler(client))
 }
 
 // splitComma splits a comma-separated string into trimmed, non-empty parts.
@@ -326,17 +325,4 @@ func getArticleHandler(client *api.Client) server.ToolHandlerFunc {
 
 		return mcp.NewToolResultText(b.String()), nil
 	}
-}
-
-// --- export_case ---
-
-func exportCaseTool() mcp.Tool {
-	return mcp.NewTool("export_case",
-		mcp.WithDescription("Export a Red Hat support case to a complete standalone markdown document with all metadata, comments, and attachment info."),
-		mcp.WithString("case_number", mcp.Required(), mcp.Description("The case number to export")),
-	)
-}
-
-func exportCaseHandler(client *api.Client) server.ToolHandlerFunc {
-	return getCaseHandler(client)
 }

@@ -62,7 +62,7 @@ const DefaultTemplate = `# Case {{.Case.CaseNumber}}: {{.Case.Summary}}
 | Filename | Size | UUID | Uploaded |
 |----------|------|------|----------|
 {{range .Attachments -}}
-| {{.Filename}} | {{formatSize .Length}} | {{truncUUID .UUID}} | {{formatTime .CreatedDate}} |
+| {{.Filename}} | {{FormatSize .Length}} | {{truncUUID .UUID}} | {{formatTime .CreatedDate}} |
 {{end}}
 {{end}}
 ---
@@ -91,7 +91,7 @@ func NewFormatter() (*Formatter, error) {
 func NewFormatterWithTemplate(tmplStr string) (*Formatter, error) {
 	funcMap := template.FuncMap{
 		"formatTime": formatTime,
-		"formatSize": formatSize,
+		"FormatSize": FormatSize,
 		"cleanHTML":  CleanHTML,
 		"truncUUID":  truncUUID,
 		"add":        func(a, b int) int { return a + b },
@@ -145,8 +145,8 @@ func formatTime(t interface{}) string {
 	}
 }
 
-// formatSize formats a byte size for display
-func formatSize(bytes int64) string {
+// FormatSize formats a byte size for display
+func FormatSize(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {
 		return fmt.Sprintf("%d B", bytes)

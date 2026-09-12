@@ -23,8 +23,6 @@ type QuickSearchCancelMsg struct{}
 type QuickSearch struct {
 	styles    *styles.Styles
 	textInput textinput.Model
-	width     int
-	height    int
 	visible   bool
 }
 
@@ -58,12 +56,6 @@ func (q *QuickSearch) Hide() {
 // IsVisible returns whether the modal is visible
 func (q *QuickSearch) IsVisible() bool {
 	return q.visible
-}
-
-// SetSize sets the container size for centering
-func (q *QuickSearch) SetSize(width, height int) {
-	q.width = width
-	q.height = height
 }
 
 // Update handles input

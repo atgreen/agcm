@@ -30,7 +30,7 @@ func formatFilePickerOutput(output string, width int) string {
 		}
 
 		// Check if this is the cursor line (starts with > after stripping ANSI)
-		plainLine := stripAnsi(line)
+		plainLine := stripANSI(line)
 		isCursor := strings.HasPrefix(plainLine, ">")
 
 		// Pad the line to full width
@@ -61,19 +61,18 @@ const (
 
 // FilePickerDialog is a modal file picker dialog
 type FilePickerDialog struct {
-	styles       *styles.Styles
-	filepicker   filepicker.Model
-	textInput    textinput.Model
-	title        string
-	message      string
-	mode         FilePickerMode
-	width        int
-	height       int
-	visible      bool
-	showInput    bool // Toggle between filepicker and text input
-	selectedPath string
-	onConfirm    func(string)
-	onCancel     func()
+	styles     *styles.Styles
+	filepicker filepicker.Model
+	textInput  textinput.Model
+	title      string
+	message    string
+	mode       FilePickerMode
+	width      int
+	height     int
+	visible    bool
+	showInput  bool // Toggle between filepicker and text input
+	onConfirm  func(string)
+	onCancel   func()
 }
 
 // NewFilePickerDialog creates a new file picker dialog
@@ -143,12 +142,10 @@ func (f *FilePickerDialog) Show(title, message string, mode FilePickerMode, defa
 			f.filepicker.CurrentDirectory = absDir
 		}
 		f.textInput.SetValue(defaultPath)
-		f.selectedPath = defaultPath
 	} else {
 		cwd, _ := filepath.Abs(".")
 		f.filepicker.CurrentDirectory = cwd
 		f.textInput.SetValue("")
-		f.selectedPath = ""
 	}
 
 	return f.filepicker.Init()
@@ -246,7 +243,6 @@ func (f *FilePickerDialog) Update(msg tea.Msg) (*FilePickerDialog, tea.Cmd) {
 
 	// Check if a file/dir was selected
 	if didSelect, path := f.filepicker.DidSelectFile(msg); didSelect {
-		f.selectedPath = path
 		if f.onConfirm != nil {
 			f.onConfirm(path)
 		}
@@ -322,14 +318,4 @@ func (f *FilePickerDialog) View() string {
 		Width(min(60, f.width-4))
 
 	return boxStyle.Render(content.String())
-}
-
-// GetBox returns just the dialog box for overlaying
-func (f *FilePickerDialog) GetBox() string {
-	return f.View()
-}
-
-// GetDimensions returns the dimensions needed for centering
-func (f *FilePickerDialog) GetDimensions() (width, height int) {
-	return f.width, f.height
 }

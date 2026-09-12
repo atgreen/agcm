@@ -52,15 +52,6 @@ func NewTokenManager(offlineToken string) *TokenManager {
 	}
 }
 
-// SetOfflineToken updates the offline token
-func (tm *TokenManager) SetOfflineToken(token string) {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-	tm.offlineToken = token
-	tm.accessToken = ""
-	tm.expiresAt = time.Time{}
-}
-
 // GetAccessToken returns a valid access token, refreshing if necessary
 func (tm *TokenManager) GetAccessToken(ctx context.Context) (string, error) {
 	tm.mu.RLock()
@@ -130,20 +121,4 @@ func ValidateOfflineToken(ctx context.Context, offlineToken string) error {
 	tm := NewTokenManager(offlineToken)
 	_, err := tm.GetAccessToken(ctx)
 	return err
-}
-
-// IsTokenExpired checks if the current access token is expired
-func (tm *TokenManager) IsTokenExpired() bool {
-	tm.mu.RLock()
-	defer tm.mu.RUnlock()
-	return tm.accessToken == "" || time.Now().Add(TokenExpiryBuffer).After(tm.expiresAt)
-}
-
-// Clear removes all stored tokens
-func (tm *TokenManager) Clear() {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-	tm.offlineToken = ""
-	tm.accessToken = ""
-	tm.expiresAt = time.Time{}
 }

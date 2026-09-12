@@ -49,7 +49,6 @@ func DraculaColors() ColorScheme {
 		Warning:    lipgloss.Color("#F1FA8C"), // Yellow
 		Error:      lipgloss.Color("#FF5555"), // Red
 		Muted:      lipgloss.Color("#6272A4"), // Comment blue-grey
-		Background: lipgloss.Color("#282A36"),
 		Foreground: lipgloss.Color("#F8F8F2"),
 		Border:     lipgloss.Color("#44475A"),
 		Highlight:  lipgloss.Color("#6272A4"),
@@ -70,7 +69,6 @@ func SolarizedColors() ColorScheme {
 		Warning:    lipgloss.Color("#B58900"), // Yellow
 		Error:      lipgloss.Color("#DC322F"), // Red
 		Muted:      lipgloss.Color("#586E75"), // Base01
-		Background: lipgloss.Color("#002B36"), // Base03
 		Foreground: lipgloss.Color("#93A1A1"), // Base1
 		Border:     lipgloss.Color("#586E75"),
 		Highlight:  lipgloss.Color("#268BD2"),
@@ -95,7 +93,6 @@ func MonoColors() ColorScheme {
 		Warning:    white,
 		Error:      white,
 		Muted:      grey,
-		Background: lipgloss.Color("0"),
 		Foreground: white,
 		Border:     grey,
 		Highlight:  grey,

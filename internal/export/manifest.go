@@ -75,37 +75,3 @@ func (m *Manifest) Save(path string) error {
 
 	return nil
 }
-
-// LoadManifest reads a manifest from a JSON file
-func LoadManifest(path string) (*Manifest, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest: %w", err)
-	}
-
-	var m Manifest
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("failed to parse manifest: %w", err)
-	}
-
-	return &m, nil
-}
-
-// GetCaseNumbers returns all case numbers in the manifest
-func (m *Manifest) GetCaseNumbers() []string {
-	numbers := make([]string, len(m.Cases))
-	for i, c := range m.Cases {
-		numbers[i] = c.CaseNumber
-	}
-	return numbers
-}
-
-// FindCase finds a case in the manifest by number
-func (m *Manifest) FindCase(caseNumber string) *ManifestCase {
-	for i := range m.Cases {
-		if m.Cases[i].CaseNumber == caseNumber {
-			return &m.Cases[i]
-		}
-	}
-	return nil
-}

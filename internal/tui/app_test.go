@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/green/agcm/internal/api"
+	"github.com/green/agcm/internal/tui/components"
 	"github.com/green/agcm/internal/tui/styles"
 )
 
@@ -129,7 +130,7 @@ func TestAnsiCutPreservesEscapes(t *testing.T) {
 	csi := "\x1b[31mred\x1b[0m"
 
 	// A cut that keeps the region must keep the OSC-8 open/close pair
-	got := ansiCut(link+"tail", 0, 4)
+	got := components.AnsiCut(link+"tail", 0, 4)
 	if !strings.Contains(got, "\x1b]8;;https://example.com\x1b\\") {
 		t.Errorf("OSC-8 open sequence lost: %q", got)
 	}
@@ -138,18 +139,18 @@ func TestAnsiCutPreservesEscapes(t *testing.T) {
 	}
 
 	// CSI sequences inside the window survive; visible width is respected
-	got = ansiCut(csi, 0, 3)
+	got = components.AnsiCut(csi, 0, 3)
 	if !strings.Contains(got, "\x1b[31m") || !strings.Contains(got, "red") {
 		t.Errorf("CSI cut broken: %q", got)
 	}
 
 	// A double-width rune straddling the boundary is dropped, not split
-	got = ansiCut("ab漢cd", 0, 3)
+	got = components.AnsiCut("ab漢cd", 0, 3)
 	if strings.ContainsRune(got, '漢') {
 		t.Errorf("straddling wide rune should be dropped: %q", got)
 	}
 	if got != "ab" {
-		t.Errorf("ansiCut(ab漢cd, 0, 3) = %q, want %q", got, "ab")
+		t.Errorf("AnsiCut(ab漢cd, 0, 3) = %q, want %q", got, "ab")
 	}
 }
 

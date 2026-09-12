@@ -146,29 +146,14 @@ func (m *Manager) Get() *Config {
 	return m.config
 }
 
-// Set updates the configuration
-func (m *Manager) Set(cfg *Config) {
-	m.config = cfg
-}
-
 // GetBaseURL returns the API base URL
 func (m *Manager) GetBaseURL() string {
 	return m.config.API.BaseURL
 }
 
-// GetTimeout returns the API timeout
-func (m *Manager) GetTimeout() time.Duration {
-	return m.config.API.Timeout
-}
-
 // GetTheme returns the UI theme
 func (m *Manager) GetTheme() string {
 	return m.config.UI.Theme
-}
-
-// GetPageSize returns the UI page size
-func (m *Manager) GetPageSize() int {
-	return m.config.UI.PageSize
 }
 
 // GetPreset returns a filter preset by slot key (1-9, 0)
@@ -185,11 +170,6 @@ func (m *Manager) SetPreset(slot string, preset *FilterPreset) {
 		m.config.Presets = make(map[string]*FilterPreset)
 	}
 	m.config.Presets[slot] = preset
-}
-
-// GetPresets returns all presets
-func (m *Manager) GetPresets() map[string]*FilterPreset {
-	return m.config.Presets
 }
 
 // GetDebugLogFile returns the configured debug log file path, or empty string if not set

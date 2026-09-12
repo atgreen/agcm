@@ -26,7 +26,6 @@ var (
 	tuiPreset    string
 	configMgr    *config.Manager
 	tokenMgr     *auth.TokenManager
-	storage      *auth.Storage
 	apiClient    *api.Client
 	version      string
 )
@@ -141,7 +140,7 @@ func initApp() error {
 	}
 
 	// Initialize auth storage
-	storage = auth.NewStorage(cfgDir)
+	storage := auth.NewStorage(cfgDir)
 
 	// Load token
 	token, err := storage.LoadToken()
@@ -162,6 +161,9 @@ func initApp() error {
 		api.WithTokenRefresher(func(ctx context.Context) (string, error) {
 			return tokenMgr.GetAccessToken(ctx)
 		}),
+	}
+	if t := configMgr.Get().API.Timeout; t > 0 {
+		clientOpts = append(clientOpts, api.WithTimeout(t))
 	}
 
 	if debugMode {
@@ -188,20 +190,6 @@ func GetConfigDir() string {
 // IsDebugMode returns whether debug mode is enabled
 func IsDebugMode() bool {
 	return debugMode
-}
-
-// GetStorage returns the auth storage
-func GetStorage() *auth.Storage {
-	return storage
-}
-
-// GetDebugLogPath returns the resolved debug log file path.
-// Returns empty string if debug mode is not enabled.
-func GetDebugLogPath() string {
-	if !debugMode {
-		return ""
-	}
-	return resolveDebugLogPath()
 }
 
 // resolveDebugLogPath determines the debug log path from flag, config, or default.

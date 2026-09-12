@@ -49,33 +49,17 @@ type HydraDoc struct {
 	URI              string   `json:"uri"`
 }
 
-// CaseFilterRequest is the request body for the POST /support/v1/cases/filter endpoint (legacy)
-type CaseFilterRequest struct {
-	MaxResults    int      `json:"maxResults"`
-	Offset        int      `json:"offset,omitempty"`
-	Status        string   `json:"status,omitempty"`
-	Statuses      []string `json:"statuses,omitempty"`
-	Severity      string   `json:"severity,omitempty"`
-	Severities    []string `json:"severities,omitempty"`
-	Product       string   `json:"product,omitempty"`
-	Products      []string `json:"products,omitempty"`
-	IncludeClosed bool     `json:"includeClosed,omitempty"`
-	AccountNumber string   `json:"accountNumber,omitempty"`
-	GroupNumber   string   `json:"groupNumber,omitempty"`
-	OwnerSSOName  string   `json:"ownerSSOName,omitempty"`
-	Keyword       string   `json:"keyword,omitempty"`
-	StartDate     string   `json:"startDate,omitempty"`
-	EndDate       string   `json:"endDate,omitempty"`
-	SortField     string   `json:"sortField,omitempty"`
-	SortOrder     string   `json:"sortOrder,omitempty"`
-}
-
-// CaseFilterResponse is the response from /support/v1/cases/filter (legacy)
-type CaseFilterResponse struct {
-	Cases      []Case `json:"cases"`
-	TotalCount int    `json:"totalCount"`
-	Offset     int    `json:"offset"`
-	MaxResults int    `json:"maxResults"`
+// solrClause builds a Solr field query matching any of the given values,
+// e.g. case_status:("Open" OR "Closed")
+func solrClause(field string, values []string) string {
+	if len(values) == 1 {
+		return fmt.Sprintf("%s:%q", field, values[0])
+	}
+	quoted := make([]string, len(values))
+	for i, v := range values {
+		quoted[i] = fmt.Sprintf("%q", v)
+	}
+	return fmt.Sprintf("%s:(%s)", field, strings.Join(quoted, " OR "))
 }
 
 // ListCases retrieves a list of cases with optional filtering
@@ -97,65 +81,21 @@ func (c *Client) ListCases(ctx context.Context, filter *CaseFilter) (*ListRespon
 	var fqParts []string
 
 	if filter != nil {
-		// Status filter
 		if len(filter.Status) > 0 {
-			if len(filter.Status) == 1 {
-				fqParts = append(fqParts, fmt.Sprintf("case_status:%q", filter.Status[0]))
-			} else {
-				// Multiple statuses: case_status:("Open" OR "Closed")
-				quoted := make([]string, len(filter.Status))
-				for i, s := range filter.Status {
-					quoted[i] = fmt.Sprintf("%q", s)
-				}
-				fqParts = append(fqParts, fmt.Sprintf("case_status:(%s)", strings.Join(quoted, " OR ")))
-			}
+			fqParts = append(fqParts, solrClause("case_status", filter.Status))
 		}
-
-		// Severity filter - use full severity strings like status filter
 		if len(filter.Severity) > 0 {
-			if len(filter.Severity) == 1 {
-				fqParts = append(fqParts, fmt.Sprintf("case_severity:%q", filter.Severity[0]))
-			} else {
-				quoted := make([]string, len(filter.Severity))
-				for i, s := range filter.Severity {
-					quoted[i] = fmt.Sprintf("%q", s)
-				}
-				fqParts = append(fqParts, fmt.Sprintf("case_severity:(%s)", strings.Join(quoted, " OR ")))
-			}
+			fqParts = append(fqParts, solrClause("case_severity", filter.Severity))
 		}
-
-		// Product filter (supports multiple products)
 		if len(filter.Products) > 0 {
-			if len(filter.Products) == 1 {
-				fqParts = append(fqParts, fmt.Sprintf("case_product:%q", filter.Products[0]))
-			} else {
-				quoted := make([]string, len(filter.Products))
-				for i, p := range filter.Products {
-					quoted[i] = fmt.Sprintf("%q", p)
-				}
-				fqParts = append(fqParts, fmt.Sprintf("case_product:(%s)", strings.Join(quoted, " OR ")))
-			}
+			fqParts = append(fqParts, solrClause("case_product", filter.Products))
 		}
-
-		// Account filter (supports multiple accounts)
 		if len(filter.Accounts) > 0 {
-			if len(filter.Accounts) == 1 {
-				fqParts = append(fqParts, fmt.Sprintf("case_accountNumber:%q", filter.Accounts[0]))
-			} else {
-				quoted := make([]string, len(filter.Accounts))
-				for i, a := range filter.Accounts {
-					quoted[i] = fmt.Sprintf("%q", a)
-				}
-				fqParts = append(fqParts, fmt.Sprintf("case_accountNumber:(%s)", strings.Join(quoted, " OR ")))
-			}
+			fqParts = append(fqParts, solrClause("case_accountNumber", filter.Accounts))
 		}
-
-		// Group filter
 		if filter.GroupNumber != "" {
 			fqParts = append(fqParts, fmt.Sprintf("case_groupNumber:%q", filter.GroupNumber))
 		}
-
-		// Owner filter
 		if filter.OwnerSSOName != "" {
 			fqParts = append(fqParts, fmt.Sprintf("case_owner:%q", filter.OwnerSSOName))
 		}
@@ -218,7 +158,6 @@ func (c *Client) ListCases(ctx context.Context, filter *CaseFilter) (*ListRespon
 		if len(doc.CaseProduct) > 0 {
 			product = doc.CaseProduct[0]
 		}
-		version := doc.CaseVersion
 
 		cs := Case{
 			CaseNumber:    doc.CaseNumber,
@@ -226,7 +165,7 @@ func (c *Client) ListCases(ctx context.Context, filter *CaseFilter) (*ListRespon
 			Status:        doc.CaseStatus,
 			Severity:      doc.CaseSeverity,
 			Product:       product,
-			Version:       version,
+			Version:       doc.CaseVersion,
 			AccountNumber: doc.CaseAccountNum,
 			ContactName:   doc.CaseContactName,
 		}
@@ -263,12 +202,6 @@ func (c *Client) GetCase(ctx context.Context, caseNumber string) (*Case, error) 
 	return &result, nil
 }
 
-// FilterCases performs advanced case filtering using POST
-// This is now the same as ListCases with the new API
-func (c *Client) FilterCases(ctx context.Context, filter *CaseFilter) (*ListResponse[Case], error) {
-	return c.ListCases(ctx, filter)
-}
-
 // GetCaseComments retrieves all comments for a case
 func (c *Client) GetCaseComments(ctx context.Context, caseNumber string) ([]Comment, error) {
 	body, err := c.getRaw(ctx, fmt.Sprintf("/support/v1/cases/%s/comments", caseNumber), nil)
@@ -277,7 +210,7 @@ func (c *Client) GetCaseComments(ctx context.Context, caseNumber string) ([]Comm
 	}
 
 	// Debug: write first comment's raw JSON to see field names
-	if c.debug && c.debugFile != nil && len(body) > 0 {
+	if c.debugFile != nil && len(body) > 0 {
 		// Parse as generic JSON to see actual structure
 		var raw []map[string]interface{}
 		if json.Unmarshal(body, &raw) == nil && len(raw) > 0 {
@@ -324,18 +257,6 @@ func (c *Client) GetCaseAttachments(ctx context.Context, caseNumber string) ([]A
 		return nil, fmt.Errorf("failed to decode attachments: %w", err)
 	}
 	return wrapped.Attachments, nil
-}
-
-// GetCaseValues retrieves reference values for cases (types, severities, statuses)
-// Note: This may need adjustment based on the new API structure
-func (c *Client) GetCaseValues(ctx context.Context) (*CaseValues, error) {
-	// The new API may have different endpoints for these values
-	// For now, return hardcoded common values
-	return &CaseValues{
-		Types:      []string{"Bug", "Feature Request", "Documentation", "Other"},
-		Severities: []string{"1 (Urgent)", "2 (High)", "3 (Normal)", "4 (Low)"},
-		Statuses:   []string{"Open", "Waiting on Red Hat", "Waiting on Customer", "Closed"},
-	}, nil
 }
 
 // ListCaseProducts retrieves distinct product names from the Hydra case index.

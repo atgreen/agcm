@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/green/agcm/internal/api"
 	"github.com/green/agcm/internal/export"
 	"github.com/spf13/cobra"
 )
@@ -51,14 +52,9 @@ func runShowCase(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get comments
-	var comments []any
+	var comments []api.Comment
 	if showComments {
-		commentsResult, err := client.GetCaseComments(ctx, caseNumber)
-		if err == nil {
-			for _, c := range commentsResult {
-				comments = append(comments, c)
-			}
-		}
+		comments, _ = client.GetCaseComments(ctx, caseNumber)
 	}
 
 	// Get attachments
@@ -74,9 +70,8 @@ func runShowCase(cmd *cobra.Command, args []string) error {
 
 	// Print comments separately for better CLI output
 	if showComments && len(comments) > 0 {
-		commentsResult, _ := client.GetCaseComments(ctx, caseNumber)
 		fmt.Print("\n## Comments\n\n")
-		for i, comment := range commentsResult {
+		for i, comment := range comments {
 			fmt.Printf("### Comment %d\n", i+1)
 			fmt.Printf("**From:** %s\n", comment.Author)
 			fmt.Printf("**Date:** %s\n", comment.CreatedDate.Format("2006-01-02 15:04"))

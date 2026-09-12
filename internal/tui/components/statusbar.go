@@ -68,11 +68,6 @@ func (s *StatusBar) SpinnerTick() tea.Cmd {
 	return s.spinner.Tick
 }
 
-// Init returns spinner tick command
-func (s *StatusBar) Init() tea.Cmd {
-	return s.spinner.Tick
-}
-
 // Update implements tea.Model
 func (s *StatusBar) Update(msg tea.Msg) (*StatusBar, tea.Cmd) {
 	var cmd tea.Cmd
@@ -124,9 +119,9 @@ func (s *StatusBar) View() string {
 	}
 
 	// Calculate spacing
-	leftLen := len(stripAnsi(left))
-	centerLen := len(stripAnsi(center))
-	rightLen := len(stripAnsi(right))
+	leftLen := len(stripANSI(left))
+	centerLen := len(stripANSI(center))
+	rightLen := len(stripANSI(right))
 
 	totalLen := leftLen + centerLen + rightLen
 	if totalLen >= s.width {
@@ -157,24 +152,3 @@ func (s *StatusBar) View() string {
 		Render(ansiCutWidth(content, s.width))
 }
 
-// stripAnsi removes ANSI escape codes for length calculation
-func stripAnsi(s string) string {
-	var result strings.Builder
-	inEscape := false
-
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-			continue
-		}
-		if inEscape {
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-				inEscape = false
-			}
-			continue
-		}
-		result.WriteRune(r)
-	}
-
-	return result.String()
-}

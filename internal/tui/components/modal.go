@@ -92,11 +92,6 @@ func (m *Modal) IsVisible() bool {
 	return m.visible
 }
 
-// GetType returns the modal type
-func (m *Modal) GetType() ModalType {
-	return m.modalType
-}
-
 // SetSize sets the modal container size
 func (m *Modal) SetSize(width, height int) {
 	m.width = width

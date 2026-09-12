@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/green/agcm/internal/api"
 	"github.com/green/agcm/internal/tui/styles"
@@ -79,11 +78,6 @@ func (f *FilterBar) HasActiveFilter() bool {
 		f.filter.Keyword != "" ||
 		len(f.filter.Status) > 0 ||
 		len(f.filter.Severity) > 0
-}
-
-// Update handles input (not much to do for display-only component)
-func (f *FilterBar) Update(msg tea.Msg) (*FilterBar, tea.Cmd) {
-	return f, nil
 }
 
 func (f *FilterBar) renderPill(label, value string) string {

@@ -52,7 +52,7 @@ go test -v -run TestName ./path/to/package
 
 - **internal/mcp/** - MCP (Model Context Protocol) server
   - `server.go` - Server setup, stdio transport
-  - `tools.go` - Tool definitions and handlers (list_cases, get_case, search, get_solution, get_article, export_case)
+  - `tools.go` - Tool definitions and handlers (list_cases, get_case, search, get_solution, get_article)
 
 - **internal/tui/** - Bubble Tea TUI
   - `app.go` - Main model, Update/View loop, state management
@@ -72,7 +72,9 @@ go test -v -run TestName ./path/to/package
 
 Config stored at `~/.config/agcm/config.yaml` (or `$XDG_CONFIG_HOME/agcm/`):
 - `api.base_url` - API endpoint (default: https://api.access.redhat.com)
+- `api.timeout` - HTTP client timeout (default: 30s)
 - `ui.theme` - Color theme: auto, dark, light, dracula, solarized, mono (cycled with `t` in the TUI)
+- `ui.page_size` - Default `list cases` limit when `--limit` is not given (default: 25)
 - `defaults.account_number` - Default account filter
 - `defaults.group_number` - Default group filter
 - `debug.log_file` - Custom debug log file path

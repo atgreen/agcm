@@ -102,23 +102,6 @@ type Article struct {
 	URI          string    `json:"uri,omitempty"`
 }
 
-// Product represents a Red Hat product
-type Product struct {
-	Name     string   `json:"name"`
-	Code     string   `json:"code,omitempty"`
-	Versions []string `json:"versions,omitempty"`
-}
-
-// Entitlement represents a support entitlement
-type Entitlement struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	SLA         string    `json:"sla,omitempty"`
-	StartDate   time.Time `json:"startDate"`
-	EndDate     time.Time `json:"endDate"`
-	ServiceType string    `json:"serviceType,omitempty"`
-}
-
 // CaseFilter contains filter options for listing cases
 type CaseFilter struct {
 	Status        []string   `json:"status,omitempty"`
@@ -151,11 +134,4 @@ type ListResponse[T any] struct {
 	TotalCount int `json:"totalCount"`
 	StartIndex int `json:"startIndex"`
 	Count      int `json:"count"`
-}
-
-// CaseValues contains reference values for cases
-type CaseValues struct {
-	Types      []string `json:"types"`
-	Severities []string `json:"severities"`
-	Statuses   []string `json:"statuses"`
 }

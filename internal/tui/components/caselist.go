@@ -37,7 +37,6 @@ type CaseList struct {
 	sortReverse bool
 	maskMode    bool
 	debugInfo   string
-	totalCount  int
 }
 
 // SetMaskMode enables/disables text masking for privacy
@@ -123,11 +122,6 @@ func (c *CaseList) SetSort(field SortField, reverse bool) {
 	c.sortReverse = reverse
 }
 
-// SetTotalCount sets the total case count for scrollbar sizing.
-func (c *CaseList) SetTotalCount(total int) {
-	c.totalCount = total
-}
-
 // SetDebugInfo sets a debug string to show in the separator line when enabled.
 func (c *CaseList) SetDebugInfo(info string) {
 	c.debugInfo = info
@@ -205,7 +199,7 @@ func (c *CaseList) ScrollToRelativeLine(line int) {
 	// Calculate thumb size to match renderScrollbar
 	thumbSize := 1
 	if areaHeight > 0 && totalRows > 0 {
-		thumbSize = maxInt(1, areaHeight*visibleRows/totalRows)
+		thumbSize = max(1, areaHeight*visibleRows/totalRows)
 	}
 	trackHeight := areaHeight - thumbSize
 	if trackHeight < 1 {
@@ -294,13 +288,13 @@ func (c *CaseList) Update(msg tea.Msg) (*CaseList, tea.Cmd) {
 		case key.Matches(msg, c.keys.Bottom):
 			c.cursor = len(c.cases) - 1
 			c.ensureVisible()
-		case msg.String() == "pgup":
+		case key.Matches(msg, c.keys.PageUp):
 			c.cursor -= c.visibleRows()
 			if c.cursor < 0 {
 				c.cursor = 0
 			}
 			c.ensureVisible()
-		case msg.String() == "pgdown":
+		case key.Matches(msg, c.keys.PageDown):
 			c.cursor += c.visibleRows()
 			if c.cursor >= len(c.cases) {
 				c.cursor = len(c.cases) - 1
@@ -505,47 +499,6 @@ func trimWidth(s string, width int) string {
 	return s[:width]
 }
 
-func ansiCutWidth(s string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	result := ""
-	visualPos := 0
-	inEscape := false
-
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-			if visualPos < width {
-				result += string(r)
-			}
-			continue
-		}
-		if inEscape {
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-				inEscape = false
-			}
-			if visualPos < width {
-				result += string(r)
-			}
-			continue
-		}
-		if visualPos >= width {
-			break
-		}
-		result += string(r)
-		visualPos++
-	}
-
-	return result
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 func (c *CaseList) renderSeparator(width int) string {
 	if c.debugInfo != "" {
@@ -578,7 +531,7 @@ func (c *CaseList) renderScrollbar(height int) string {
 		areaHeight = height
 	}
 
-	thumbSize := maxInt(1, areaHeight*visibleRows/totalRows)
+	thumbSize := max(1, areaHeight*visibleRows/totalRows)
 	maxScroll := totalRows - visibleRows
 	scrollPos := c.offset
 	thumbPos := 0

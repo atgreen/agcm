@@ -26,7 +26,7 @@ To use with Claude Code, add to your MCP settings:
     }
   }
 
-Available tools: list_cases, get_case, search, get_solution, get_article, export_case`,
+Available tools: list_cases, get_case, search, get_solution, get_article`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return mcpserver.Run(GetAPIClient(), version)
 	},

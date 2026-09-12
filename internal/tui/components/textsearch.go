@@ -86,23 +86,10 @@ func (t *TextSearch) SetWidth(width int) {
 	t.textInput.Width = min(40, width-30)
 }
 
-// GetQuery returns the current search query
-func (t *TextSearch) GetQuery() string {
-	return t.query
-}
-
 // SetMatches sets the search results
 func (t *TextSearch) SetMatches(matches []TextMatch) {
 	t.matches = matches
 	t.current = 0
-}
-
-// GetCurrentMatch returns the current match or nil
-func (t *TextSearch) GetCurrentMatch() *TextMatch {
-	if len(t.matches) == 0 || t.current >= len(t.matches) {
-		return nil
-	}
-	return &t.matches[t.current]
 }
 
 // NextMatch moves to the next match

@@ -46,21 +46,6 @@ func (s *Storage) testKeyring() bool {
 	return true
 }
 
-// DefaultConfigDir returns the default configuration directory
-func DefaultConfigDir() (string, error) {
-	// Check XDG_CONFIG_HOME first
-	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		return filepath.Join(xdgConfig, "agcm"), nil
-	}
-
-	// Fall back to ~/.config
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-	return filepath.Join(home, ".config", "agcm"), nil
-}
-
 // EnsureDir creates the config directory if it doesn't exist
 func (s *Storage) EnsureDir() error {
 	return os.MkdirAll(s.configDir, dirPerms)
@@ -123,11 +108,6 @@ func (s *Storage) HasToken() bool {
 	path := filepath.Join(s.configDir, tokenFileName)
 	_, err := os.Stat(path)
 	return err == nil
-}
-
-// ConfigDir returns the configuration directory path
-func (s *Storage) ConfigDir() string {
-	return s.configDir
 }
 
 // UsingKeyring returns true if keyring storage is being used

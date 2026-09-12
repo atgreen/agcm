@@ -25,7 +25,6 @@ type Options struct {
 	Combined           bool // Combine all cases into single file
 	Concurrency        int
 	TemplatePath       string   // Custom template file
-	CaseNumbers        []string // Specific cases to export
 	Debug              bool     // Enable debug logging
 	DebugFile          *os.File // Debug log file (if nil, debug output goes to stderr)
 }
@@ -46,7 +45,6 @@ type Progress struct {
 	CompletedCases int
 	CurrentCase    string
 	CurrentStep    string
-	Error          error
 }
 
 // Exporter handles bulk case exports
