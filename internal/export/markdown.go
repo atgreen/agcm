@@ -24,7 +24,7 @@ const DefaultTemplate = `# Case {{.Case.CaseNumber}}: {{.Case.Summary}}
 | Case Number | {{.Case.CaseNumber}} |
 | Status | {{.Case.Status}} |
 | Severity | {{.Case.Severity}} |
-| Product | {{.Case.Product}} {{if .Case.Version}}{{.Case.Version}}{{end}} |
+| Product | {{.Case.Product}} |
 | Type | {{.Case.Type}} |
 | Created | {{formatTime .Case.CreatedDate}} |
 | Last Updated | {{formatTime .Case.LastModified}} |
@@ -33,7 +33,7 @@ const DefaultTemplate = `# Case {{.Case.CaseNumber}}: {{.Case.Summary}}
 {{- end}}
 | Owner | {{.Case.Owner}} |
 | Contact | {{.Case.ContactName}} ({{.Case.ContactEmail}}) |
-| Account | {{.Case.AccountName}} ({{.Case.AccountNumber}}) |
+| Account | {{.Case.AccountNumber}} |
 
 ## Summary
 
@@ -47,7 +47,7 @@ const DefaultTemplate = `# Case {{.Case.CaseNumber}}: {{.Case.Summary}}
 
 {{range $i, $c := .Comments}}
 ### Comment {{add $i 1}}
-**From:** {{$c.Author}}{{if $c.AuthorEmail}} ({{$c.AuthorEmail}}){{end}}
+**From:** {{$c.Author}}
 **Date:** {{formatTime $c.CreatedDate}}
 **Type:** {{if $c.IsPublicComment}}Public{{else}}Internal{{end}}
 
@@ -62,7 +62,7 @@ const DefaultTemplate = `# Case {{.Case.CaseNumber}}: {{.Case.Summary}}
 | Filename | Size | UUID | Uploaded |
 |----------|------|------|----------|
 {{range .Attachments -}}
-| {{.Filename}} | {{FormatSize .Length}} | {{truncUUID .UUID}} | {{formatTime .CreatedDate}} |
+| {{.Filename}} | {{FormatSize .Size}} | {{truncUUID .UUID}} | {{formatTime .CreatedDate}} |
 {{end}}
 {{end}}
 ---
@@ -136,6 +136,16 @@ func formatTime(t interface{}) string {
 		}
 		return v.UTC().Format("2006-01-02 15:04:05 UTC")
 	case *time.Time:
+		if v == nil || v.IsZero() {
+			return "N/A"
+		}
+		return v.UTC().Format("2006-01-02 15:04:05 UTC")
+	case api.FlexTime:
+		if v.IsZero() {
+			return "N/A"
+		}
+		return v.UTC().Format("2006-01-02 15:04:05 UTC")
+	case *api.FlexTime:
 		if v == nil || v.IsZero() {
 			return "N/A"
 		}

@@ -18,6 +18,8 @@ func testCaseList() *CaseList {
 	return NewCaseList(styles.DarkStyles(), styles.DefaultKeyMap())
 }
 
+func ft(t time.Time) api.FlexTime { return api.FlexTime{Time: t} }
+
 // Truncation must never split UTF-8 sequences or overflow the column budget,
 // including for CJK and emoji summaries.
 func TestRenderRowWideCharacters(t *testing.T) {
@@ -36,7 +38,7 @@ func TestRenderRowWideCharacters(t *testing.T) {
 			Summary:      summary,
 			Status:       "Waiting on Red Hat",
 			Severity:     "2 (High)",
-			LastModified: time.Now(),
+			LastModified: ft(time.Now()),
 		}
 		for _, selected := range []bool{true, false} {
 			row := c.renderRow(cs, 75, selected)
@@ -58,7 +60,7 @@ func TestRenderRowStatusColumn(t *testing.T) {
 		Summary:      "s",
 		Status:       strings.Repeat("状態", 30),
 		Severity:     "3 (Normal)",
-		LastModified: time.Now(),
+		LastModified: ft(time.Now()),
 	}
 	row := c.renderRow(cs, 75, true)
 	if !utf8.ValidString(row) {
@@ -115,7 +117,7 @@ func TestNarrowWidthKeepsSummaryRoom(t *testing.T) {
 		Summary:      "kernel panic on boot after upgrade",
 		Status:       "Waiting on Red Hat",
 		Severity:     "2 (High)",
-		LastModified: time.Now(),
+		LastModified: ft(time.Now()),
 	}
 	row := c.renderRow(cs, 55, false)
 	if w := lipgloss.Width(row); w > 55 {
@@ -136,8 +138,8 @@ func TestRenderRowDateFollowsSortField(t *testing.T) {
 		Summary:      "s",
 		Status:       "Open",
 		Severity:     "3 (Normal)",
-		CreatedDate:  created,
-		LastModified: modified,
+		CreatedDate:  ft(created),
+		LastModified: ft(modified),
 	}
 
 	c.SetSort(SortByLastModified, true)

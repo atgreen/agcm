@@ -126,11 +126,11 @@ func (f *FilterBar) View() string {
 			var abbrev []string
 			for _, s := range f.filter.Status {
 				switch s {
-				case "Open":
+				case "Open", "In Progress":
 					abbrev = append(abbrev, "Open")
 				case "Waiting on Red Hat":
 					abbrev = append(abbrev, "WaitRH")
-				case "Waiting on Customer":
+				case "Waiting on Customer", "Waiting on Customer Action Required":
 					abbrev = append(abbrev, "WaitCust")
 				case "Closed":
 					abbrev = append(abbrev, "Closed")

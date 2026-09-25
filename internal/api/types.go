@@ -2,9 +2,44 @@
 // Copyright (C) 2026 Anthony Green <green@redhat.com>
 package api
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
 
-// Case represents a Red Hat support case
+	"github.com/jaytaylor/html2text"
+)
+
+// FlexTime wraps time.Time with flexible JSON parsing for the v3 API's
+// Salesforce date format ("2006-01-02T15:04:05.000+0000").
+type FlexTime struct {
+	time.Time
+}
+
+var flexTimeFormats = []string{
+	"2006-01-02T15:04:05.000+0000",
+	"2006-01-02T15:04:05.000-0000",
+	time.RFC3339,
+	"2006-01-02T15:04:05Z",
+	"2006-01-02T15:04:05.000Z",
+}
+
+func (ft *FlexTime) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "" || s == "null" {
+		ft.Time = time.Time{}
+		return nil
+	}
+	for _, layout := range flexTimeFormats {
+		if t, err := time.Parse(layout, s); err == nil {
+			ft.Time = t
+			return nil
+		}
+	}
+	return fmt.Errorf("cannot parse time %q", s)
+}
+
+// Case represents a Red Hat support case (v3 API)
 type Case struct {
 	CaseNumber    string       `json:"caseNumber"`
 	Summary       string       `json:"summary"`
@@ -13,65 +48,63 @@ type Case struct {
 	Severity      string       `json:"severity"`
 	Product       string       `json:"product"`
 	Version       string       `json:"version"`
-	Type          string       `json:"type"`
-	AccountNumber string       `json:"accountNumber"`
-	AccountName   string       `json:"accountName"`
+	Type          string       `json:"caseType"`
+	AccountNumber string       `json:"accountNumberRef"`
 	ContactName   string       `json:"contactName"`
-	ContactEmail  string       `json:"contactEmail"`
-	Owner         string       `json:"owner"`
-	CreatedBy     string       `json:"createdBy"`
-	CreatedDate   time.Time    `json:"createdDate"`
-	LastModified  time.Time    `json:"lastModifiedDate"`
-	ClosedDate    *time.Time   `json:"closedDate,omitempty"`
+	ContactEmail  string       `json:"emailAddress"`
+	Owner         string       `json:"ownerId"`
+	CreatedBy     string       `json:"createdById"`
+	CreatedDate   FlexTime     `json:"createdDate"`
+	LastModified  FlexTime     `json:"lastModifiedDate"`
+	ClosedDate    *FlexTime    `json:"lastClosedAt,omitempty"`
+	IsClosed      bool         `json:"isClosed,omitempty"`
+	GroupNumber   string       `json:"groupNumber,omitempty"`
+	GroupName     string       `json:"groupName,omitempty"`
 	Comments      []Comment    `json:"comments,omitempty"`
 	Attachments   []Attachment `json:"attachments,omitempty"`
 	URI           string       `json:"uri,omitempty"`
 }
 
-// Comment represents a comment on a support case
+// Comment represents a comment on a support case (v3 API)
 type Comment struct {
-	ID           string    `json:"id"`
-	CaseNumber   string    `json:"caseNumber,omitempty"`
-	Text         string    `json:"text"`
-	CommentBody  string    `json:"commentBody"` // Alternative field name
-	Author       string    `json:"createdBy"`
-	AuthorEmail  string    `json:"createdByEmail,omitempty"`
-	CreatedDate  time.Time `json:"createdDate"`
-	LastModified time.Time `json:"lastModifiedDate,omitempty"`
-	Public       bool      `json:"public"`
-	IsPublic     bool      `json:"isPublic"`   // Alternative field name
-	CasePublic   bool      `json:"casePublic"` // Another alternative
-	Draft        bool      `json:"draft"`
-	URI          string    `json:"uri,omitempty"`
+	ID            string   `json:"id"`
+	CaseNumber    string   `json:"caseNumber,omitempty"`
+	CommentBody   string   `json:"commentBody"`
+	Author        string   `json:"createdBy"`
+	CreatedByType string   `json:"createdByType,omitempty"`
+	CreatedDate   FlexTime `json:"createdDate"`
+	LastModified  FlexTime `json:"lastModifiedDate,omitempty"`
+	Draft         bool     `json:"isDraft"`
+	ContentType   string   `json:"contentType,omitempty"`
 }
 
-// IsPublicComment returns true if the comment is public (checks multiple field names)
+// IsPublicComment returns true if the comment is from a Customer or Associate (not Internal)
 func (c *Comment) IsPublicComment() bool {
-	return c.Public || c.IsPublic || c.CasePublic
+	return c.CreatedByType != "Internal"
 }
 
-// GetText returns the comment text (checks multiple field names)
+// GetText returns the comment body as plain text, converting from HTML if needed.
 func (c *Comment) GetText() string {
-	if c.CommentBody != "" {
+	if !strings.Contains(c.CommentBody, "<") {
 		return c.CommentBody
 	}
-	return c.Text
+	text, err := html2text.FromString(c.CommentBody, html2text.Options{OmitLinks: true})
+	if err != nil {
+		return c.CommentBody
+	}
+	return text
 }
 
-// Attachment represents a file attached to a case
+// Attachment represents a file attached to a case (v3 API)
 type Attachment struct {
-	UUID          string    `json:"uuid"`
-	Filename      string    `json:"fileName"`
-	Description   string    `json:"description,omitempty"`
-	Length        int64     `json:"length"`
-	Size          int64     `json:"size"`
-	FileSize      int64     `json:"fileSize"`
-	ContentLength int64     `json:"contentLength"`
-	MimeType      string    `json:"mimeType,omitempty"`
-	CreatedBy     string    `json:"createdBy"`
-	CreatedDate   time.Time `json:"createdDate"`
-	LastModified  time.Time `json:"lastModifiedDate,omitempty"`
-	URI           string    `json:"uri,omitempty"`
+	UUID         string   `json:"uuid"`
+	Filename     string   `json:"fileName"`
+	Description  string   `json:"description,omitempty"`
+	Size         int64    `json:"size"`
+	CreatedBy    string   `json:"createdBy"`
+	CreatedDate  FlexTime `json:"createdDate"`
+	LastModified FlexTime `json:"lastModifiedDate,omitempty"`
+	Link         string   `json:"link,omitempty"`
 }
 
 // Solution represents a knowledge base solution
@@ -116,6 +149,7 @@ type CaseFilter struct {
 	Accounts      []string   `json:"accounts,omitempty"`     // Filter by account number(s)
 	GroupNumber   string     `json:"groupNumber,omitempty"`  // Filter by case group
 	OwnerSSOName  string     `json:"ownerSSOName,omitempty"` // Filter by owner
+	Cursor        string     `json:"cursor,omitempty"`       // GraphQL cursor for pagination
 }
 
 // SearchResult represents a search result item
@@ -130,8 +164,9 @@ type SearchResult struct {
 
 // ListResponse is a generic paginated response
 type ListResponse[T any] struct {
-	Items      []T `json:"items"`
-	TotalCount int `json:"totalCount"`
-	StartIndex int `json:"startIndex"`
-	Count      int `json:"count"`
+	Items      []T    `json:"items"`
+	TotalCount int    `json:"totalCount"`
+	StartIndex int    `json:"startIndex"`
+	Count      int    `json:"count"`
+	NextCursor string `json:"nextCursor,omitempty"`
 }

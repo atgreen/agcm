@@ -75,9 +75,9 @@ func runShowCase(cmd *cobra.Command, args []string) error {
 			fmt.Printf("### Comment %d\n", i+1)
 			fmt.Printf("**From:** %s\n", comment.Author)
 			fmt.Printf("**Date:** %s\n", comment.CreatedDate.Format("2006-01-02 15:04"))
-			fmt.Printf("**Public:** %v\n\n", comment.Public)
+			fmt.Printf("**Type:** %s\n\n", comment.CreatedByType)
 
-			text := comment.Text
+			text := comment.GetText()
 			if len(text) > 2000 {
 				text = text[:2000] + "\n... (truncated)"
 			}

@@ -38,7 +38,7 @@ func runListAccounts(cmd *cobra.Command, args []string) error {
 	// Get all cases to extract unique account numbers
 	// This is a workaround since there's no direct accounts API
 	// Paginate through all results
-	accounts := make(map[string]string) // number -> name
+	accounts := make(map[string]bool)
 	startIndex := 0
 	pageSize := 100
 
@@ -48,7 +48,7 @@ func runListAccounts(cmd *cobra.Command, args []string) error {
 		filter := &api.CaseFilter{
 			StartIndex:    startIndex,
 			Count:         pageSize,
-			IncludeClosed: true, // Include all cases to get all accounts
+			IncludeClosed: true,
 		}
 		result, err := client.ListCases(ctx, filter)
 		if err != nil {
@@ -57,11 +57,10 @@ func runListAccounts(cmd *cobra.Command, args []string) error {
 
 		for _, c := range result.Items {
 			if c.AccountNumber != "" {
-				accounts[c.AccountNumber] = c.AccountName
+				accounts[c.AccountNumber] = true
 			}
 		}
 
-		// Check if we've fetched all cases
 		if len(result.Items) < pageSize || startIndex+len(result.Items) >= result.TotalCount {
 			break
 		}
@@ -76,11 +75,11 @@ func runListAccounts(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "ACCOUNT NUMBER\tACCOUNT NAME")
-	_, _ = fmt.Fprintln(w, "--------------\t------------")
+	_, _ = fmt.Fprintln(w, "ACCOUNT NUMBER")
+	_, _ = fmt.Fprintln(w, "--------------")
 
-	for num, name := range accounts {
-		_, _ = fmt.Fprintf(w, "%s\t%s\n", num, name)
+	for num := range accounts {
+		_, _ = fmt.Fprintf(w, "%s\n", num)
 	}
 	_ = w.Flush()
 

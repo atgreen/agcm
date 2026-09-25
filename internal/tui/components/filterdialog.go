@@ -156,11 +156,11 @@ func (f *FilterDialog) ShowWithFilter(filter *api.CaseFilter) tea.Cmd {
 			f.statusClosed = false
 			for _, s := range filter.Status {
 				switch s {
-				case "Open":
+				case "Open", "In Progress":
 					f.statusOpen = true
 				case "Waiting on Red Hat":
 					f.statusWaitingRH = true
-				case "Waiting on Customer":
+				case "Waiting on Customer", "Waiting on Customer Action Required":
 					f.statusWaitingCust = true
 				case "Closed":
 					f.statusClosed = true

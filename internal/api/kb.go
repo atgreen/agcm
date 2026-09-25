@@ -3,11 +3,8 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/url"
 )
 
 // GetSolution retrieves a single solution by ID
@@ -100,41 +97,28 @@ func (c *Client) Search(ctx context.Context, keyword string, limit int) ([]Searc
 	return searchResults, nil
 }
 
-// SearchCases searches for cases by keyword
+// SearchCases searches for cases by keyword via the v3 filter API
 func (c *Client) SearchCases(ctx context.Context, keyword string, limit int) ([]SearchResult, error) {
 	if limit <= 0 {
 		limit = 10
 	}
 
-	// Build the expression for case search
-	fieldList := "case_number,case_summary,case_status,case_severity"
-	expression := "sort=case_lastModifiedDate desc&fl=" + url.QueryEscape(fieldList)
-
-	req := HydraSearchRequest{
-		Query:         keyword,
-		Start:         0,
-		Rows:          limit,
-		PartnerSearch: false,
-		Expression:    expression,
+	filter := &CaseFilter{
+		Keyword:       keyword,
+		Count:         limit,
+		IncludeClosed: true,
 	}
-
-	body, err := json.Marshal(req)
+	resp, err := c.ListCases(ctx, filter)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal search request: %w", err)
-	}
-
-	var resp HydraSearchResponse
-	if err := c.postHydra(ctx, "/hydra/rest/search/v2/cases", bytes.NewReader(body), &resp); err != nil {
 		return nil, err
 	}
 
-	// Convert to SearchResult format
-	results := make([]SearchResult, 0, len(resp.Response.Docs))
-	for _, doc := range resp.Response.Docs {
+	results := make([]SearchResult, 0, len(resp.Items))
+	for _, cs := range resp.Items {
 		results = append(results, SearchResult{
 			Type:  "case",
-			ID:    doc.CaseNumber,
-			Title: doc.CaseSummary,
+			ID:    cs.CaseNumber,
+			Title: cs.Summary,
 		})
 	}
 

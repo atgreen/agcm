@@ -33,10 +33,10 @@ go test -v -run TestName ./path/to/package
   - `cmd/mcp.go` - `mcp` subcommand, starts MCP server over stdio
   - `cmd/completion.go` - `completion` subcommand, generates shell completions
 
-- **internal/api/** - Red Hat Customer Portal API client
-  - `client.go` - HTTP client with token refresh handling
-  - `cases.go` - Case listing, details, comments, attachments
-  - `products.go` - Product listing for filters
+- **internal/api/** - Red Hat Customer Portal API client (v3)
+  - `client.go` - HTTP client with token refresh handling, attachment download
+  - `cases.go` - Case listing/filtering, details, comments, attachments (v3 API)
+  - `kb.go` - KCS search (solutions/articles), case keyword search
   - `types.go` - API data structures
 
 - **internal/auth/** - OAuth token management

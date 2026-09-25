@@ -15,6 +15,8 @@ import (
 	"github.com/green/agcm/internal/tui/styles"
 )
 
+func ft(t time.Time) api.FlexTime { return api.FlexTime{Time: t} }
+
 func TestNormalizeCaseNumber(t *testing.T) {
 	tests := []struct {
 		in, want string
@@ -45,9 +47,9 @@ func frameModel(w, h int) *Model {
 	m.initialLoadDone = true
 	now := time.Now()
 	m.cases = []api.Case{
-		{CaseNumber: "00000001", Summary: "kernel panic on boot", Status: "Open", Severity: "1 (Urgent)", LastModified: now},
-		{CaseNumber: "00000002", Summary: "サーバーが応答しません — wide chars", Status: "Waiting on Red Hat", Severity: "2 (High)", LastModified: now.Add(-time.Hour)},
-		{CaseNumber: "00000003", Summary: "slow NFS mounts", Status: "Closed", Severity: "3 (Normal)", LastModified: now.Add(-2 * time.Hour)},
+		{CaseNumber: "00000001", Summary: "kernel panic on boot", Status: "Open", Severity: "1 (Urgent)", LastModified: ft(now)},
+		{CaseNumber: "00000002", Summary: "サーバーが応答しません — wide chars", Status: "Waiting on Red Hat", Severity: "2 (High)", LastModified: ft(now.Add(-time.Hour))},
+		{CaseNumber: "00000003", Summary: "slow NFS mounts", Status: "Closed", Severity: "3 (Normal)", LastModified: ft(now.Add(-2 * time.Hour))},
 	}
 	m.updateLayout()
 	m.sortCases()
@@ -158,9 +160,9 @@ func TestSortCasesPreservesSelection(t *testing.T) {
 	m := testModel()
 	now := time.Now()
 	m.cases = []api.Case{
-		{CaseNumber: "00000001", LastModified: now.Add(-3 * time.Hour)},
-		{CaseNumber: "00000002", LastModified: now.Add(-2 * time.Hour)},
-		{CaseNumber: "00000003", LastModified: now.Add(-1 * time.Hour)},
+		{CaseNumber: "00000001", LastModified: ft(now.Add(-3 * time.Hour))},
+		{CaseNumber: "00000002", LastModified: ft(now.Add(-2 * time.Hour))},
+		{CaseNumber: "00000003", LastModified: ft(now.Add(-1 * time.Hour))},
 	}
 	m.caseList.SetSize(80, 10)
 	m.sortCases()
@@ -181,7 +183,7 @@ func loadPage(t *testing.T, m *Model, msg casesLoadedMsg) *Model {
 }
 
 func pageCase(n string, mod time.Time) api.Case {
-	return api.Case{CaseNumber: n, Summary: "s", Status: "Open", Severity: "3 (Normal)", LastModified: mod}
+	return api.Case{CaseNumber: n, Summary: "s", Status: "Open", Severity: "3 (Normal)", LastModified: ft(mod)}
 }
 
 // The server pages by row offset over a live list sorted by last-modified,
@@ -295,9 +297,9 @@ func TestCycleSortFieldKeepsSelection(t *testing.T) {
 	m := testModel()
 	now := time.Now()
 	m.cases = []api.Case{
-		{CaseNumber: "00000009", LastModified: now, CreatedDate: now.Add(-9 * time.Hour), Severity: "3 (Normal)"},
-		{CaseNumber: "00000001", LastModified: now.Add(-5 * time.Hour), CreatedDate: now, Severity: "1 (Urgent)"},
-		{CaseNumber: "00000005", LastModified: now.Add(-1 * time.Hour), CreatedDate: now.Add(-1 * time.Hour), Severity: "2 (High)"},
+		{CaseNumber: "00000009", LastModified: ft(now), CreatedDate: ft(now.Add(-9 * time.Hour)), Severity: "3 (Normal)"},
+		{CaseNumber: "00000001", LastModified: ft(now.Add(-5 * time.Hour)), CreatedDate: ft(now), Severity: "1 (Urgent)"},
+		{CaseNumber: "00000005", LastModified: ft(now.Add(-1 * time.Hour)), CreatedDate: ft(now.Add(-1 * time.Hour)), Severity: "2 (High)"},
 	}
 	m.caseList.SetSize(80, 10)
 	m.sortCases()

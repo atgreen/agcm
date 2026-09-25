@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/green/agcm/internal/api"
 	"github.com/green/agcm/internal/export"
 	"github.com/green/agcm/internal/tui/styles"
@@ -274,11 +275,11 @@ func (c *CaseDetail) renderDetails() string {
 	// Contact and account info (possibly masked)
 	contactName := cs.ContactName
 	contactEmail := cs.ContactEmail
-	accountName := cs.AccountName
+	accountNumber := cs.AccountNumber
 	if c.maskMode {
 		contactName = maskText(contactName)
 		contactEmail = maskText(contactEmail)
-		accountName = maskText(accountName)
+		accountNumber = maskText(accountNumber)
 	}
 
 	// Metadata table
@@ -289,12 +290,12 @@ func (c *CaseDetail) renderDetails() string {
 	}{
 		{"Status", cs.Status, func(s string) string { return c.styles.StatusStyle(s).Render(s) }},
 		{"Severity", cs.Severity, func(s string) string { return c.styles.SeverityStyle(s).Render(s) }},
-		{"Product", fmt.Sprintf("%s %s", cs.Product, cs.Version), nil},
+		{"Product", cs.Product, nil},
 		{"Type", cs.Type, nil},
 		{"Created", cs.CreatedDate.Format("2006-01-02 15:04"), nil},
 		{"Updated", cs.LastModified.Format("2006-01-02 15:04"), nil},
 		{"Contact", fmt.Sprintf("%s (%s)", contactName, contactEmail), nil},
-		{"Account", fmt.Sprintf("%s (%s)", accountName, cs.AccountNumber), nil},
+		{"Account", accountNumber, nil},
 	}
 
 	for _, row := range rows {
@@ -323,6 +324,10 @@ func (c *CaseDetail) renderDetails() string {
 	description := cs.Description
 	if c.maskMode {
 		description = maskText(description)
+	}
+	descWrap := c.width - 5
+	if descWrap > 20 {
+		description = ansi.Wrap(description, descWrap, "")
 	}
 	descLines := strings.Split(description, "\n")
 	var highlightedLines []string
@@ -391,6 +396,12 @@ func (c *CaseDetail) renderComments() string {
 		commentText := comment.GetText()
 		if c.maskMode {
 			commentText = maskText(commentText)
+		}
+
+		// Word-wrap to fit the viewport (width minus border/scrollbar/indent)
+		wrapWidth := c.width - 11
+		if wrapWidth > 20 {
+			commentText = ansi.Wrap(commentText, wrapWidth, "")
 		}
 
 		// Highlight each line individually to support current match highlighting
@@ -481,17 +492,8 @@ func (c *CaseDetail) renderAttachments() string {
 }
 
 func attachmentSize(att api.Attachment) (int64, bool) {
-	if att.Length > 0 {
-		return att.Length, true
-	}
 	if att.Size > 0 {
 		return att.Size, true
-	}
-	if att.FileSize > 0 {
-		return att.FileSize, true
-	}
-	if att.ContentLength > 0 {
-		return att.ContentLength, true
 	}
 	return 0, false
 }

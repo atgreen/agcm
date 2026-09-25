@@ -103,8 +103,10 @@ type Model struct {
 	sortField        SortField
 	sortReverse      bool
 	loadingCases     bool
+	loadingPage      bool   // True when loading an additional page (append), not a fresh list
 	loadingDetail    bool
 	initialLoadDone  bool   // Set true after first successful case load
+	loadGen          uint64 // Bumped on each fresh (non-append) case load to detect stale responses
 	highlightedCase  string // Currently highlighted case number
 	pendingFetch     string // Case number waiting to be fetched (debounce)
 	detailCache      map[string]*CachedCaseDetail
@@ -130,7 +132,8 @@ type Model struct {
 	filterDialog *components.FilterDialog
 	filterBar    *components.FilterBar
 	activeFilter *api.CaseFilter
-	totalCases   int // Total cases before filtering (for display)
+	totalCases   int    // Total cases before filtering (for display)
+	nextCursor   string // GraphQL cursor for next page
 	products     []string
 
 	// Presets
@@ -150,8 +153,11 @@ type casesLoadedMsg struct {
 	cases      []api.Case
 	totalCount int
 	startIndex int
+	requested  int    // maxResults that was sent in the request
 	append     bool
 	err        error
+	gen        uint64 // Generation counter — stale non-append responses are dropped
+	nextCursor string // GraphQL cursor for next page
 }
 
 type caseDetailLoadedMsg struct {
@@ -278,29 +284,45 @@ func (m *Model) Init() tea.Cmd {
 	)
 }
 
-// loadCasesWithFilter loads the first page of cases for the given filter
+// loadCasesWithFilter loads the first page of cases for the given filter.
+// It bumps loadGen so any in-flight non-append responses become stale.
 func (m *Model) loadCasesWithFilter(filter *api.CaseFilter) tea.Cmd {
-	return func() tea.Msg { return m.fetchCasesPage(filter, 0, false) }
+	m.loadGen++
+	m.nextCursor = ""
+	gen := m.loadGen
+	return func() tea.Msg { return m.fetchCasesPage(filter, 0, false, gen) }
 }
 
 // loadCasesPage loads a page of cases under the active filter, optionally appending.
 func (m *Model) loadCasesPage(start int, append bool) tea.Cmd {
-	return func() tea.Msg { return m.fetchCasesPage(m.activeFilter, start, append) }
+	if !append {
+		m.loadGen++
+		m.nextCursor = ""
+	}
+	gen := m.loadGen
+	return func() tea.Msg { return m.fetchCasesPage(m.activeFilter, start, append, gen) }
 }
 
-func (m *Model) fetchCasesPage(filter *api.CaseFilter, start int, append bool) tea.Msg {
+func (m *Model) fetchCasesPage(filter *api.CaseFilter, start int, append bool, gen uint64) tea.Msg {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	result, err := m.client.ListCases(ctx, m.withDefaults(filter, start, casePageSize))
+	merged := m.withDefaults(filter, start, casePageSize)
+	if append {
+		merged.Cursor = m.nextCursor
+	}
+	result, err := m.client.ListCases(ctx, merged)
 	if err != nil {
-		return casesLoadedMsg{err: err}
+		return casesLoadedMsg{err: err, gen: gen}
 	}
 	return casesLoadedMsg{
 		cases:      result.Items,
 		totalCount: result.TotalCount,
 		startIndex: result.StartIndex,
+		requested:  merged.Count,
 		append:     append,
+		gen:        gen,
+		nextCursor: result.NextCursor,
 	}
 }
 
@@ -362,32 +384,44 @@ func (m *Model) loadCaseDetail(caseNumber string) tea.Cmd {
 }
 
 func (m *Model) fetchAllCaseNumbers(ctx context.Context, filter *api.CaseFilter) ([]string, error) {
-	start := 0
-	total := -1
+	var cursor string
 	var caseNumbers []string
 
 	for {
-		reqFilter := m.withDefaults(filter, start, casePageSize)
+		reqFilter := m.withDefaults(filter, 0, casePageSize)
+		reqFilter.Cursor = cursor
 		result, err := m.client.ListCases(ctx, reqFilter)
 		if err != nil {
 			return nil, err
 		}
-		if total < 0 {
-			total = result.TotalCount
-		}
 		for _, c := range result.Items {
 			caseNumbers = append(caseNumbers, c.CaseNumber)
 		}
-		if len(result.Items) == 0 || len(caseNumbers) >= total {
+		if result.NextCursor == "" || len(result.Items) == 0 {
 			break
 		}
-		start += len(result.Items)
+		cursor = result.NextCursor
 	}
 
 	return caseNumbers, nil
 }
 
 func (m *Model) loadProducts() tea.Cmd {
+	// Extract products from already-loaded cases to avoid a slow extra API call.
+	if len(m.cases) > 0 {
+		seen := make(map[string]bool)
+		for _, c := range m.cases {
+			if c.Product != "" {
+				seen[c.Product] = true
+			}
+		}
+		products := make([]string, 0, len(seen))
+		for p := range seen {
+			products = append(products, p)
+		}
+		sort.Strings(products)
+		return func() tea.Msg { return productsLoadedMsg{products: products} }
+	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -537,15 +571,15 @@ func (m *Model) sortCases() {
 		var less bool
 		switch m.sortField {
 		case SortByLastModified:
-			less = m.cases[i].LastModified.Before(m.cases[j].LastModified)
+			less = m.cases[i].LastModified.Before(m.cases[j].LastModified.Time)
 		case SortByCreated:
-			less = m.cases[i].CreatedDate.Before(m.cases[j].CreatedDate)
+			less = m.cases[i].CreatedDate.Before(m.cases[j].CreatedDate.Time)
 		case SortBySeverity:
 			less = m.cases[i].Severity < m.cases[j].Severity
 		case SortByCaseNumber:
 			less = m.cases[i].CaseNumber < m.cases[j].CaseNumber
 		default:
-			less = m.cases[i].LastModified.Before(m.cases[j].LastModified)
+			less = m.cases[i].LastModified.Before(m.cases[j].LastModified.Time)
 		}
 		if m.sortReverse {
 			return !less
@@ -607,6 +641,7 @@ func (m *Model) resetForReload() {
 	m.loadingCases = true
 	m.detailCache = make(map[string]*CachedCaseDetail)
 	m.totalCases = 0
+	m.nextCursor = ""
 }
 
 // checkHighlightChange checks if the highlighted case changed and triggers debounced fetch
@@ -878,7 +913,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Refresh
 		if key.Matches(msg, m.keys.Refresh) {
 			m.loadingCases = true
-			m.detailCache = make(map[string]*CachedCaseDetail) // Clear cache
+			m.detailCache = make(map[string]*CachedCaseDetail)
+			m.nextCursor = ""
 			return m, tea.Batch(m.loadCasesPage(0, false), m.spinner.Tick)
 		}
 
@@ -1058,15 +1094,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case casesLoadedMsg:
 		m.loadingCases = false
+		m.loadingPage = false
 		selectedCase := ""
 		savedOffset := m.caseList.GetOffset()
 		if sel := m.caseList.SelectedCase(); sel != nil {
 			selectedCase = sel.CaseNumber
 		}
 		if msg.err != nil {
+			if msg.gen < m.loadGen {
+				break // Stale error from a superseded load — ignore
+			}
 			m.statusBar.SetConnected(false)
 			m.statusBar.SetMessage(m.styles.Error.Render("Error: "+msg.err.Error()), 5*time.Second)
-		} else if msg.append && msg.startIndex != len(m.cases) {
+		} else if !msg.append && msg.gen < m.loadGen {
+			// Stale non-append response: a newer load was triggered (e.g. preset
+			// applied while the initial load was in flight) — drop it.
+			m.statusBar.SetConnected(true)
+		} else if msg.append && (msg.gen < m.loadGen || msg.startIndex != len(m.cases)) {
 			// Stale page: a refresh or filter change replaced the list while
 			// this fetch was in flight — drop it. maybeLoadMoreCases will
 			// re-request from the correct offset if still needed.
@@ -1074,17 +1118,32 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.statusBar.SetConnected(true)
 			if msg.append {
+				prevLen := len(m.cases)
 				m.cases = mergeCases(m.cases, msg.cases)
+				if len(m.cases) == prevLen || len(msg.cases) == 0 {
+					// No new unique cases from this page — the API's
+					// totalCount exceeds what it can actually return.
+					// Cap to stop further paging.
+					m.totalCases = len(m.cases)
+				} else if msg.totalCount > 0 {
+					m.totalCases = msg.totalCount
+				}
 			} else {
 				m.cases = msg.cases
 				m.initialLoadDone = true // First load complete
-			}
-			if msg.totalCount > 0 {
-				m.totalCases = msg.totalCount
-			} else if !msg.append {
-				m.totalCases = len(m.cases)
+				if msg.totalCount > 0 {
+					m.totalCases = msg.totalCount
+				} else {
+					m.totalCases = len(m.cases)
+				}
+				// If the API returned fewer cases than requested, it has
+				// no more to give regardless of what totalCount claims.
+				if msg.requested > 0 && len(msg.cases) < msg.requested && len(msg.cases) < m.totalCases {
+					m.totalCases = len(m.cases)
+				}
 			}
 			m.sortCases()
+			m.nextCursor = msg.nextCursor
 			if msg.append {
 				// Stop any active scrollbar drag - case count changed so drag math is invalid
 				m.listScrollDrag = false
@@ -1129,6 +1188,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Case:        msg.case_,
 				Comments:    msg.comments,
 				Attachments: msg.attachments,
+			}
+			// Sync the case list entry with fresh REST API data so the
+			// list reflects real-time status instead of stale Hydra/Solr data.
+			for i, c := range m.cases {
+				if c.CaseNumber == msg.caseNumber {
+					m.cases[i].Status = msg.case_.Status
+					m.cases[i].Severity = msg.case_.Severity
+					m.cases[i].Summary = msg.case_.Summary
+					m.cases[i].Product = msg.case_.Product
+					m.cases[i].Version = msg.case_.Version
+					m.cases[i].LastModified = msg.case_.LastModified
+					break
+				}
 			}
 			// Only update display if this is still the highlighted case
 			if msg.caseNumber == m.highlightedCase {
@@ -1286,6 +1358,7 @@ func (m *Model) maybeLoadMoreCases() tea.Cmd {
 	visible := m.caseList.VisibleRows()
 	if m.caseList.GetOffset()+visible >= len(m.cases)-1 {
 		m.loadingCases = true
+		m.loadingPage = true
 		return tea.Batch(m.loadCasesPage(len(m.cases), true), m.spinner.Tick)
 	}
 	return nil
@@ -1622,8 +1695,8 @@ func (m *Model) View() string {
 		list := trimTrailingNewlines(m.caseList.View())
 		detail := trimTrailingNewlines(m.caseDetail.View())
 
-		// If loading cases (after initial load), overlay spinner on list pane
-		if m.loadingCases && m.initialLoadDone {
+		// If loading a fresh case list (not a page append), overlay spinner on list pane
+		if m.loadingCases && m.initialLoadDone && !m.loadingPage {
 			list = m.overlaySpinner(list, "Loading cases...")
 		}
 

@@ -285,69 +285,36 @@ func (c *Client) post(ctx context.Context, path string, requestBody interface{},
 	return nil
 }
 
-// postHydra performs a POST request to the Hydra API (different base URL)
-func (c *Client) postHydra(ctx context.Context, path string, body io.Reader, result interface{}) error {
-	// Hydra API uses access.redhat.com instead of api.access.redhat.com
-	hydraURL := "https://access.redhat.com" + path
+// downloadURLResponse is the v3 attachment download response
+type downloadURLResponse struct {
+	DownloadURL      string `json:"downloadUrl"`
+	FileName         string `json:"fileName"`
+	ExpiresInSeconds string `json:"expiresInSeconds"`
+}
 
-	var bodyBytes []byte
-	if body != nil && c.debugFile != nil {
-		bodyBytes, _ = io.ReadAll(body)
-		body = bytes.NewReader(bodyBytes)
+// DownloadAttachment downloads an attachment via the v3 API.
+// The v3 endpoint returns a presigned URL which is then fetched.
+func (c *Client) DownloadAttachment(ctx context.Context, caseNumber, uuid string) (io.ReadCloser, string, error) {
+	var dlResp downloadURLResponse
+	path := fmt.Sprintf("/support/v3/cases/attachments/downloadFile/%s/%s", caseNumber, uuid)
+	if err := c.get(ctx, path, nil, &dlResp); err != nil {
+		return nil, "", fmt.Errorf("failed to get download URL: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, hydraURL, body)
+	if dlResp.DownloadURL == "" {
+		return nil, "", fmt.Errorf("empty download URL for attachment %s", uuid)
+	}
+
+	c.debugf("[%s] GET %s (presigned)\n", time.Now().Format("15:04:05"), dlResp.DownloadURL)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, dlResp.DownloadURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
-	token, err := c.getToken(ctx)
-	if err != nil {
-		return err
-	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
-	c.debugf("[%s] POST %s\n", time.Now().Format("15:04:05"), hydraURL)
-	if len(bodyBytes) > 0 {
-		c.debugf("  Request: %s\n", string(bodyBytes))
+		return nil, "", fmt.Errorf("failed to create download request: %w", err)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
-
-	c.debugResponse(resp.StatusCode, respBody)
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("hydra API error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	if result != nil {
-		if err := json.Unmarshal(respBody, result); err != nil {
-			return fmt.Errorf("failed to decode response: %w", err)
-		}
-	}
-	return nil
-}
-
-// DownloadAttachment downloads an attachment and returns the content
-func (c *Client) DownloadAttachment(ctx context.Context, caseNumber, uuid string) (io.ReadCloser, string, error) {
-	path := fmt.Sprintf("/support/v1/cases/%s/attachments/%s", caseNumber, uuid)
-	resp, err := c.do(ctx, http.MethodGet, path, nil, nil)
-	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("failed to download attachment: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -355,12 +322,5 @@ func (c *Client) DownloadAttachment(ctx context.Context, caseNumber, uuid string
 		return nil, "", fmt.Errorf("failed to download attachment: status %d", resp.StatusCode)
 	}
 
-	filename := ""
-	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
-		if i := strings.Index(cd, "filename="); i != -1 {
-			filename = strings.Trim(cd[i+9:], `"`)
-		}
-	}
-
-	return resp.Body, filename, nil
+	return resp.Body, dlResp.FileName, nil
 }
